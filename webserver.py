@@ -1,10 +1,9 @@
-from pathlib import Path
 import subprocess
 from html import escape
 
 from flask import Flask, redirect, render_template_string, request, send_file, url_for
 
-from bluetooth import connect_device, paired_devices, scan_on
+from bluetooth import connect_device, devices, scan_for_devices
 from config_store import ROOT, load_config, save_config, update_activity
 from documents import counts, list_documents, new_document, preview, read_text, set_current_document, write_text
 from language import set_selected_languages
@@ -32,10 +31,13 @@ PAGE = """
     table { width: 100%; border-collapse: collapse; background: white; }
     th, td { border-bottom: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
     button, a.button { display: inline-block; padding: 8px 12px; border: 1px solid #222; background: white; color: #111; text-decoration: none; cursor: pointer; }
+    input, select { padding: 7px; min-width: 220px; }
     textarea { width: 100%; min-height: 45vh; font: 16px/1.45 ui-monospace, monospace; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .muted { color: #666; }
+    .notice { padding: 10px 12px; background: #fff; border-left: 4px solid #111; }
     section { margin: 22px 0; }
+    label { display: inline-flex; gap: 4px; align-items: center; margin: 4px 10px 4px 0; }
   </style>
 </head>
 <body>
@@ -61,7 +63,7 @@ def index():
         chars, words = counts(text)
         number = path.stem.replace("note", "")
         rows.append(
-            f"<tr><td>{number}</td><td>{preview(text, int(config.get('web_preview_chars', 12)))}</td>"
+            f"<tr><td>{number}</td><td>{escape(preview(text, int(config.get('web_preview_chars', 12))))}</td>"
             f"<td>{chars}자 / {words}단어</td>"
             f"<td><a class='button' href='{url_for('edit_doc', name=path.name)}'>열기</a> "
             f"<a class='button' href='{url_for('download_doc', name=path.name)}'>받기</a></td></tr>"
@@ -95,7 +97,7 @@ def edit_doc(name: str):
     path = ROOT / "docs" / name
     if not path.exists() or not name.startswith("note") or path.suffix != ".txt":
         return ("not found", 404)
-    text = read_text(path)
+    text = escape(read_text(path))
     body = f"""
     <section><a class="button" href="{url_for('index')}">목록</a></section>
     <form method="post">
@@ -135,9 +137,11 @@ def settings():
     selected = set(config.get("selected_languages", ["EN", "KO"]))
     checks = []
     for item in languages:
-        code = item["code"]
-        disabled = "disabled checked" if code == "EN" else ("checked" if code in selected else "")
-        checks.append(f"<label><input type='checkbox' name='language' value='{code}' {disabled}> {code} {item['label']}</label>")
+        code = escape(item["code"])
+        label = escape(item["label"])
+        checked = "checked" if item["code"] == "EN" or item["code"] in selected else ""
+        disabled = "disabled" if item["code"] == "EN" else ""
+        checks.append(f"<label><input type='checkbox' name='language' value='{code}' {checked} {disabled}> {code} {label}</label>")
     body = f"""
     <section><a class="button" href="{url_for('index')}">목록</a></section>
     <form method="post">
@@ -157,9 +161,10 @@ def settings():
         <option value="manual" {'selected' if config.get('battery_source') == 'manual' else ''}>manual</option>
         <option value="auto" {'selected' if config.get('battery_source') == 'auto' else ''}>auto</option>
       </select>
-      <input name="battery_manual_text" value="{config.get('battery_manual_text', '--%')}" maxlength="8">
-      <p>언어 선택, EN은 고정, 최대 5개</p>
-      <div class="row">{''.join(checks)}</div>
+      <input name="battery_manual_text" value="{escape(config.get('battery_manual_text', '--%'))}" maxlength="8">
+      <p>언어 선택</p>
+      <p class="muted">EN은 항상 첫 번째로 고정됩니다. 아래 지원 후보 전체 중에서 EN을 포함해 최대 5개까지 사용할 수 있습니다.</p>
+      <div>{''.join(checks)}</div>
       <p><button>저장</button></p>
     </form>
     """
@@ -176,7 +181,7 @@ def save_settings():
     config["battery_source"] = request.form.get("battery_source", "manual")
     config["battery_manual_text"] = request.form.get("battery_manual_text", "--%")[:8]
     save_config(config)
-    set_selected_languages(request.form.getlist("language")[:5])
+    set_selected_languages(request.form.getlist("language"))
     update_activity()
     return redirect(url_for("settings"))
 
@@ -184,7 +189,7 @@ def save_settings():
 @app.get("/bluetooth")
 def bluetooth_page():
     rows = []
-    for item in paired_devices():
+    for item in devices():
         name = escape(item["name"])
         mac = escape(item["mac"])
         rows.append(
@@ -193,8 +198,9 @@ def bluetooth_page():
         )
     body = f"""
     <section><a class="button" href="{url_for('index')}">목록</a></section>
+    <section class="notice">키보드를 페어링 모드로 둔 뒤 스캔을 누르십시오. 스캔은 약 10초 동안 실행됩니다.</section>
     <section class="row">
-      <form method="post" action="{url_for('bluetooth_scan')}"><button>스캔 시작</button></form>
+      <form method="post" action="{url_for('bluetooth_scan')}"><button>스캔</button></form>
     </section>
     <section>
       <table>
@@ -215,7 +221,7 @@ def bluetooth_page():
 
 @app.post("/bluetooth/scan")
 def bluetooth_scan():
-    scan_on()
+    scan_for_devices()
     update_activity()
     return redirect(url_for("bluetooth_page"))
 

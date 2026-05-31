@@ -76,7 +76,7 @@ Use the web UI for:
 - new document creation
 - Bluetooth keyboard pairing
 - Wi-Fi connection
-- language selection
+- language selection from all configured supported language candidates, with up to five active slots including fixed `EN`
 - idle shutdown and count display settings
 - USB text export refresh
 
@@ -100,6 +100,7 @@ To write on the device itself, pair a Bluetooth keyboard from the web UI, then t
 - Hangul characters render with `DungGeunMo.ttf`.
 - Latin letters, numbers, and punctuation render with `NotoSansMono-Regular.ttf`.
 - Hangul is shifted slightly downward to align visually with Latin text.
+- The language setting controls the displayed input-mode slot order. `EN` is fixed first; users can choose up to four additional languages from the full configured candidate list.
 - Top and bottom status bars are inverted by default.
 - Keyboard warning is shown as `[No KBD]`.
 - Language is shown as `[EN]` or `[한]`.
