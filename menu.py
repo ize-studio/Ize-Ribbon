@@ -2,11 +2,12 @@ from dataclasses import dataclass
 
 from config_store import load_config, save_config, update_activity
 from documents import list_documents, new_document, set_current_document
+from power import shutdown_now
 
 
-MENU_ITEMS = ["새문서", "문서목록", "자동잠자기", "카운트"]
-IDLE_OPTIONS = [("1분", 60), ("5분", 300), ("10분", 600), ("30분", 1800), ("1시간", 3600), ("OFF", 0)]
-COUNT_OPTIONS = [("OFF", "off"), ("단어", "words"), ("글자", "chars")]
+MENU_ITEMS = ["New Doc", "Docs", "Sleep Timer", "Count", "Power Off"]
+IDLE_OPTIONS = [("1 min", 60), ("5 min", 300), ("10 min", 600), ("30 min", 1800), ("1 hour", 3600), ("OFF", 0)]
+COUNT_OPTIONS = [("OFF", "off"), ("Words", "words"), ("Chars", "chars")]
 
 
 @dataclass
@@ -47,18 +48,20 @@ class MenuState:
             self.selected = (self.selected + 1) % len(MENU_ITEMS)
         elif key == "enter":
             item = MENU_ITEMS[self.selected]
-            if item == "새문서":
+            if item == "New Doc":
                 new_document()
                 self.close()
-            elif item == "문서목록":
+            elif item == "Docs":
                 self.mode = "docs"
                 self.doc_selected = 0
-            elif item == "자동잠자기":
+            elif item == "Sleep Timer":
                 self.mode = "idle"
                 self.option_confirmed = False
-            elif item == "카운트":
+            elif item == "Count":
                 self.mode = "count"
                 self.option_confirmed = False
+            elif item == "Power Off":
+                shutdown_now()
         return True
 
     def _handle_docs(self, key: str) -> bool:
@@ -123,11 +126,11 @@ class MenuState:
         if self.mode == "idle":
             config = load_config()
             current = int(config.get("idle_shutdown_seconds", 300)) if config.get("idle_shutdown_enabled", True) else 0
-            label = next((label for label, value in IDLE_OPTIONS if value == current), "5분")
+            label = next((label for label, value in IDLE_OPTIONS if value == current), "5 min")
             return [f"  {label}" if self.option_confirmed else f"< {label} >"]
         if self.mode == "count":
             config = load_config()
             current = config.get("count_mode", "chars")
-            label = next((label for label, value in COUNT_OPTIONS if value == current), "글자")
+            label = next((label for label, value in COUNT_OPTIONS if value == current), "Chars")
             return [f"  {label}" if self.option_confirmed else f"< {label} >"]
         return []

@@ -1,8 +1,8 @@
 import time
 from pathlib import Path
-import subprocess
 
 from config_store import load_config
+from power import shutdown_now
 
 
 def last_activity(path: Path) -> float:
@@ -28,14 +28,7 @@ def main() -> None:
         seconds = int(config.get("idle_shutdown_seconds", 300))
         activity_file = Path(config.get("activity_file", "/run/ize-ribbon/activity"))
         if enabled and seconds > 0 and time.time() - last_activity(activity_file) >= seconds:
-            try:
-                from display import show_message
-
-                show_message("sleep...")
-                time.sleep(2)
-            except Exception:
-                pass
-            subprocess.run(["sudo", "shutdown", "-h", "now"], check=False)
+            shutdown_now()
             return
         time.sleep(5)
 

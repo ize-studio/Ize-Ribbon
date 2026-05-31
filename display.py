@@ -163,9 +163,9 @@ def render_image(overlay_lines: list[str] | None = None) -> Image.Image:
     mode = config.get("count_mode", "chars")
     count_text = ""
     if mode == "chars":
-        count_text = f"{chars}자"
+        count_text = str(chars)
     elif mode == "words":
-        count_text = f"{words}단어"
+        count_text = str(words)
     label_font = font_for_text(label, status_size)
     count_font = font_for_text(count_text, status_size)
     max_label_width = canvas_width - margin * 3

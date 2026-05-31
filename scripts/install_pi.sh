@@ -49,6 +49,7 @@ fi
 
 install -m 0644 "$PROJECT/systemd/ize-ribbon.service" /etc/systemd/system/ize-ribbon.service
 install -m 0644 "$PROJECT/systemd/ize-ribbon-boot-splash.service" /etc/systemd/system/ize-ribbon-boot-splash.service
+install -m 0644 "$PROJECT/systemd/ize-ribbon-network-fallback.service" /etc/systemd/system/ize-ribbon-network-fallback.service
 install -m 0644 "$PROJECT/systemd/ize-ribbon-web.service" /etc/systemd/system/ize-ribbon-web.service
 install -m 0644 "$PROJECT/systemd/ize-ribbon-idle-shutdown.service" /etc/systemd/system/ize-ribbon-idle-shutdown.service
 
@@ -59,6 +60,6 @@ chmod 0440 /etc/sudoers.d/ize-ribbon
 
 systemctl daemon-reload
 systemctl disable getty@tty1.service || true
-systemctl enable ize-ribbon-boot-splash.service ize-ribbon.service ize-ribbon-web.service ize-ribbon-idle-shutdown.service
+systemctl enable ize-ribbon-boot-splash.service ize-ribbon-network-fallback.service ize-ribbon.service ize-ribbon-web.service ize-ribbon-idle-shutdown.service
 
 echo "Install complete. Reboot recommended."

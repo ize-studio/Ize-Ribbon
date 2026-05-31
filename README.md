@@ -76,11 +76,22 @@ Use the web UI for:
 - new document creation
 - Bluetooth keyboard pairing
 - Wi-Fi connection
+- device power off
 - language selection from all configured supported language candidates, with up to five active slots including fixed `EN`
 - idle shutdown and count display settings
 - USB text export refresh
 
 To write on the device itself, pair a Bluetooth keyboard from the web UI, then type directly on the keyboard. Text is appended to the current numbered document and saved on the Pi.
+
+If the device cannot join Wi-Fi within about three minutes after boot, it starts a setup access point:
+
+```text
+SSID: Ize-Ribbon
+Password: izeribbon
+Web UI: http://10.42.0.1:8080
+```
+
+Use that web UI to enter Wi-Fi credentials, then reboot or reconnect after the Pi joins the normal network.
 
 ## Controls
 
@@ -91,6 +102,7 @@ To write on the device itself, pair a Bluetooth keyboard from the web UI, then t
 - Ctrl+N: create a new numbered document.
 - Ctrl+S: save the current document.
 - Ctrl+Space: cycle selected languages.
+- Menu `Power Off`: show `sleep...`, then shut down Linux.
 - Menu Up/Down: move.
 - Menu Left/Right: change option values.
 - Menu Enter: select/confirm.

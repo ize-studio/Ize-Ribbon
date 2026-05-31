@@ -7,6 +7,7 @@ from bluetooth import connect_device, devices, scan_for_devices
 from config_store import ROOT, load_config, save_config, update_activity
 from documents import counts, list_documents, new_document, preview, read_text, set_current_document, write_text
 from language import set_selected_languages
+from power import shutdown_now
 from wifi import connect_wifi, visible_networks
 
 
@@ -75,6 +76,7 @@ def index():
       <a class="button" href="{url_for('settings')}">설정</a>
       <a class="button" href="{url_for('bluetooth_page')}">Bluetooth 키보드</a>
       <a class="button" href="{url_for('wifi_page')}">Wi-Fi</a>
+      <form method="post" action="{url_for('power_off')}"><button>Power Off</button></form>
     </section>
     <section>
       <table>
@@ -267,6 +269,12 @@ def refresh_usb():
     update_activity()
     subprocess.run(["sudo", "bash", str(ROOT / "scripts" / "refresh_usb_export.sh")], check=False)
     return redirect(url_for("index"))
+
+
+@app.post("/power/off")
+def power_off():
+    shutdown_now()
+    return page("<section class='notice'>Powering off. The e-paper should show sleep...</section>")
 
 
 def main() -> None:
