@@ -1,0 +1,12 @@
+[Unit]
+Description=Ize Ribbon USB text export gadget
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/bash /home/ize/ize-ribbon/scripts/refresh_usb_export.sh
+ExecStart=/usr/local/sbin/ize-ribbon-usb-gadget
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

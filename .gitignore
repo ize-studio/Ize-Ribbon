@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+last_render*.png
+usb_share.img
+usb_share/
+.DS_Store
+Thumbs.db

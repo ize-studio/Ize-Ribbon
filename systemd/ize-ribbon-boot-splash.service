@@ -1,0 +1,15 @@
+[Unit]
+Description=Ize Ribbon boot splash
+After=local-fs.target
+Before=ize-ribbon.service ize-ribbon-web.service
+
+[Service]
+Type=oneshot
+User=ize
+WorkingDirectory=/home/ize/ize-ribbon
+Environment=PYTHONUNBUFFERED=1
+Environment=WAVESHARE_LIB_DIR=/home/ize/e-Paper/RaspberryPi_JetsonNano/python/lib
+ExecStart=/usr/bin/python3 /home/ize/ize-ribbon/boot_splash.py
+
+[Install]
+WantedBy=multi-user.target

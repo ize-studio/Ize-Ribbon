@@ -1,0 +1,27 @@
+[Unit]
+Description=Ize Ribbon writer
+After=multi-user.target bluetooth.service
+Wants=bluetooth.service
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+
+[Service]
+Type=simple
+User=ize
+WorkingDirectory=/home/ize/ize-ribbon
+Environment=PYTHONUNBUFFERED=1
+Environment=WAVESHARE_LIB_DIR=/home/ize/e-Paper/RaspberryPi_JetsonNano/python/lib
+RuntimeDirectory=ize-ribbon
+RuntimeDirectoryMode=0775
+ExecStart=/usr/bin/python3 /home/ize/ize-ribbon/app.py
+StandardInput=tty-force
+StandardOutput=journal
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=no
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
