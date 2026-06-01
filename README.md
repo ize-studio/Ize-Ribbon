@@ -84,7 +84,6 @@ Use the web UI for:
 - language selection from all configured supported language candidates, with up to five active slots including fixed `EN`
 - idle shutdown and count display settings
 - USB text export refresh
-- The Web UI is intended for trusted local-network use only. Do not expose port 8080 to the public internet.
 
 To write on the device itself, pair a Bluetooth keyboard from the web UI, then type directly on the keyboard. Text is appended to the current numbered document and saved on the Pi.
 
