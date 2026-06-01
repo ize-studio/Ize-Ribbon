@@ -67,6 +67,7 @@ Ize Ribbon
 ize-ribbon.local:8080
 <device-ip>:8080
 ```
+(trusted local network only / do not expose to the internet)
 
 Open either address in a browser on the same Wi-Fi network.
 
@@ -122,3 +123,4 @@ Use that web UI to enter Wi-Fi credentials, then reboot or reconnect after the P
 The first implementation uses the Linux console input path. Bluetooth keyboards paired with the Pi generally type into `/dev/tty1`, which is enough for the initial device. If later keyboard detection or input needs to bypass the console, the app can be moved to `/dev/input/event*`.
 
 The USB export is deliberately read-only to avoid filesystem corruption. Use the web UI's "USB export refresh" action, or run `sudo bash scripts/refresh_usb_export.sh`, before unplugging if you want the newest text files in the virtual USB drive.
+
