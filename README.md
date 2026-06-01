@@ -71,6 +71,8 @@ ize-ribbon.local:8080
 
 Open either address in a browser on the same Wi-Fi network.
 
+The Web UI is intended for trusted local-network use only. Do not expose port 8080 to the public internet.
+
 Use the web UI for:
 
 - document list and document editing
@@ -85,6 +87,8 @@ Use the web UI for:
 To write on the device itself, pair a Bluetooth keyboard from the web UI, then type directly on the keyboard. Text is appended to the current numbered document and saved on the Pi.
 
 If the device cannot join Wi-Fi within about three minutes after boot, it starts a setup access point:
+This fallback access point is intended for first-time local setup only.
+Use it only on a trusted local network, and change the default password before regular use.
 
 ```text
 SSID: Ize-Ribbon
