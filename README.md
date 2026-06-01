@@ -67,7 +67,8 @@ Ize Ribbon
 ize-ribbon.local:8080
 <device-ip>:8080
 ```
-(trusted local network only / do not expose to the internet)
+This fallback access point is intended for first-time local setup only.
+Use it only on a trusted local network, and change the default password before regular use.
 
 Open either address in a browser on the same Wi-Fi network.
 
@@ -83,6 +84,7 @@ Use the web UI for:
 - language selection from all configured supported language candidates, with up to five active slots including fixed `EN`
 - idle shutdown and count display settings
 - USB text export refresh
+- The Web UI is intended for trusted local-network use only. Do not expose port 8080 to the public internet.
 
 To write on the device itself, pair a Bluetooth keyboard from the web UI, then type directly on the keyboard. Text is appended to the current numbered document and saved on the Pi.
 
