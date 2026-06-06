@@ -2,7 +2,7 @@
 
 Version 2.0
 
-Ize Ribbon is a Raspberry Pi Zero 2 W based writing device with a Waveshare 2.13 inch e-Paper HAT, Bluetooth or USB keyboard input, a local Web UI, Wi-Fi setup, Korean input, automatic power handling, and optional GitHub private repository sync for Postbox-style writing backup.
+Ize Ribbon is a Raspberry Pi Zero 2 W based writing device with a Waveshare 2.13 inch e-Paper HAT, Bluetooth or USB keyboard input, a local Web UI, Wi-Fi setup, Korean input, automatic power handling, and optional private GitHub repository sync.
 
 The device is designed to keep writing local and fast. Network, GitHub, USB export, and web editing features run around the writing flow instead of blocking typing.
 
@@ -547,7 +547,7 @@ Settings include:
 
 ## Web: GitHub Sync
 
-GitHub Sync lets the device use a private GitHub repository as a Postbox-style writing archive.
+GitHub Sync lets the device use a private GitHub repository as a writing archive. Documents are saved on the device, backed up to GitHub when Wi-Fi is available, and can also be edited or added from GitHub and brought back to the device during sync. This creates a workflow similar to Freewrite Postbox.
 
 Recommended setup:
 
@@ -569,9 +569,10 @@ The device uses `/home/ize/ize-ribbon/docs` as the Git working tree. Existing do
 Automatic sync behavior:
 
 - Local document writes are saved immediately.
-- Git commit/push runs in the background.
+- Git fetch/commit/push runs in the background.
 - Sync only runs when Wi-Fi is connected.
 - If Wi-Fi is unavailable, documents remain local and sync later.
+- If GitHub and the device both changed, the newer Git commit wins.
 - Git work is never required for typing to continue.
 
 Manual actions:
@@ -710,7 +711,7 @@ git log --oneline -5
 
 - GitHub private repository sync through Web UI
 - Deploy key generation from the device
-- Postbox-style document push from `docs/`
+- Automatic document sync between `docs/` and private GitHub repositories
 - Linux input event menu handling
 - Bluetooth and USB keyboard detection
 - Korean input composition

@@ -103,6 +103,33 @@ def configure_docs_repo() -> str:
     return "\n".join(part.strip() for part in messages if part.strip()) or "GitHub sync is configured."
 
 
+def _commit_local_changes() -> bool:
+    status = _git_command(["status", "--porcelain"], timeout=8)
+    if status.returncode != 0 or not status.stdout.strip():
+        return True
+    _git_command(["add", "."], timeout=8)
+    message = time.strftime("Sync ribbon writing %Y-%m-%d %H:%M:%S")
+    commit = _git_command(["commit", "-m", message], timeout=15)
+    if commit.returncode != 0 and "nothing to commit" not in (commit.stdout + commit.stderr):
+        return False
+    return True
+
+
+def _ref_text(ref: str) -> str:
+    result = _git_command(["rev-parse", "--verify", ref], timeout=8)
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _ref_time(ref: str) -> int:
+    result = _git_command(["show", "-s", "--format=%ct", ref], timeout=8)
+    if result.returncode != 0:
+        return 0
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        return 0
+
+
 def _sync_once() -> None:
     if not client_wifi_connected():
         return
@@ -110,15 +137,25 @@ def _sync_once() -> None:
         return
     if not github_repo_url():
         return
-    status = _git_command(["status", "--porcelain"], timeout=8)
-    if status.returncode != 0 or not status.stdout.strip():
+    if not _commit_local_changes():
         return
-    _git_command(["add", "."], timeout=8)
-    message = time.strftime("Sync ribbon writing %Y-%m-%d %H:%M:%S")
-    commit = _git_command(["commit", "-m", message], timeout=15)
-    if commit.returncode != 0 and "nothing to commit" not in (commit.stdout + commit.stderr):
+    fetch = _git_command(["fetch", "origin", "main"], timeout=30)
+    if fetch.returncode != 0:
+        _git_command(["push", "-u", "origin", "main"], timeout=30)
         return
-    _git_command(["push"], timeout=30)
+    local_ref = _ref_text("HEAD")
+    remote_ref = _ref_text("origin/main")
+    if not remote_ref:
+        _git_command(["push", "-u", "origin", "main"], timeout=30)
+        return
+    if local_ref == remote_ref:
+        return
+    local_time = _ref_time("HEAD")
+    remote_time = _ref_time("origin/main")
+    if remote_time >= local_time:
+        _git_command(["reset", "--hard", "origin/main"], timeout=15)
+    else:
+        _git_command(["push", "-u", "origin", "main"], timeout=30)
 
 
 def _worker() -> None:
