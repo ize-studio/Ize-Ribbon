@@ -24,6 +24,14 @@ KEY_MAP = {
 
 
 def keyboard_event_paths() -> list[Path]:
+    return _keyboard_event_paths()
+
+
+def usb_keyboard_event_paths() -> list[Path]:
+    return _keyboard_event_paths(usb_only=True)
+
+
+def _keyboard_event_paths(usb_only: bool = False) -> list[Path]:
     devices = Path("/proc/bus/input/devices")
     try:
         text = devices.read_text(encoding="utf-8", errors="ignore")
@@ -33,6 +41,8 @@ def keyboard_event_paths() -> list[Path]:
     for block in text.split("\n\n"):
         lower = block.lower()
         if "keyboard" not in lower and "kbd" not in lower:
+            continue
+        if usb_only and "usb" not in lower:
             continue
         for line in block.splitlines():
             if not line.startswith("H: Handlers="):

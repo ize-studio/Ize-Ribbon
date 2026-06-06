@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import sys
+import time
 import unicodedata
 
 from PIL import Image, ImageDraw, ImageFont
@@ -25,7 +26,9 @@ _STATUS_CACHE = {
     "right": "",
     "label": "",
     "count": "",
+    "time": 0.0,
 }
+_STATUS_CACHE_SECONDS = 30.0
 
 
 def font_path(font_key: str):
@@ -169,7 +172,9 @@ def render_image(overlay_lines: list[str] | None = None, text_override: str | No
     status_fill = 255 if invert_status else 0
     separator_fill = 255 if invert_status else 0
 
-    if lightweight:
+    refresh_status = (not lightweight) or (time.time() - float(_STATUS_CACHE.get("time", 0.0)) >= _STATUS_CACHE_SECONDS)
+
+    if not refresh_status:
         title = _STATUS_CACHE["title"]
         right = _STATUS_CACHE["right"]
     else:
@@ -181,6 +186,7 @@ def render_image(overlay_lines: list[str] | None = None, text_override: str | No
         right = " ".join(right_parts)
         _STATUS_CACHE["title"] = title
         _STATUS_CACHE["right"] = right
+        _STATUS_CACHE["time"] = time.time()
     status_font = font_for_text(title, status_size)
     right_w = mixed_textlength(draw, right, status_size)
     left = fit_text(draw, title, status_font, canvas_width - margin * 3 - int(right_w))
@@ -205,7 +211,7 @@ def render_image(overlay_lines: list[str] | None = None, text_override: str | No
 
     if not invert_status:
         draw.line((0, canvas_height - bottom_h, canvas_width, canvas_height - bottom_h), fill=separator_fill, width=scale)
-    if lightweight:
+    if not refresh_status:
         label = _STATUS_CACHE["label"]
         count_text = _STATUS_CACHE["count"]
     else:
