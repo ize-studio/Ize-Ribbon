@@ -6,6 +6,7 @@ from flask import Flask, redirect, render_template_string, request, send_file, u
 from bluetooth import adapter_status, connect_device, connected_devices, devices, remembered_devices, scan_for_devices
 from config_store import ROOT, load_config, save_config, update_activity
 from documents import counts, list_documents, new_document, preview, read_text, set_current_document, write_text
+from git_sync import configure_docs_repo, generate_ssh_key, public_key_text, request_git_sync, test_github_connection
 from language import current_language, set_selected_languages
 from network_status import active_ssid, primary_ip
 from power import shutdown_now
@@ -81,8 +82,10 @@ def status_panel() -> str:
     wifi_text = f"{escape(ssid or 'Not connected')}"
     url_text = f"http://{escape(ip)}:{port}" if ip else "Waiting for IP"
     input_text = escape(current_language())
+    version = escape(str(config.get("version", "2.0")))
     return f"""
     <section class="notice">
+      <div><strong>Version</strong>: {version}</div>
       <div><strong>Wi-Fi</strong>: {wifi_text}</div>
       <div><strong>Web UI</strong>: {url_text}</div>
       <div><strong>Bluetooth</strong>: {bluetooth_text}</div>
@@ -112,6 +115,7 @@ def index():
       <form method="post" action="{url_for('create_doc')}"><button>New Document</button></form>
       <form method="post" action="{url_for('refresh_usb')}"><button>Refresh USB Export</button></form>
       <a class="button" href="{url_for('settings')}">Settings</a>
+      <a class="button" href="{url_for('github_page')}">GitHub Sync</a>
       <a class="button" href="{url_for('bluetooth_page')}">Bluetooth Keyboard</a>
       <a class="button" href="{url_for('wifi_page')}">Wi-Fi</a>
       <form method="post" action="{url_for('power_off')}"><button>Power Off</button></form>
@@ -223,6 +227,80 @@ def save_settings():
     set_selected_languages(request.form.getlist("language"))
     update_activity()
     return redirect(url_for("settings"))
+
+
+@app.get("/github")
+def github_page():
+    config = load_config()
+    repo = escape(config.get("github_sync_repo", ""))
+    key = escape(public_key_text())
+    key_block = f"<pre>{key}</pre>" if key else "<p class='muted'>No SSH key has been generated yet.</p>"
+    body = f"""
+    <section><a class="button" href="{url_for('index')}">Back</a></section>
+    {notice_from_query()}
+    <section class="notice">
+      <div><strong>GitHub Sync</strong></div>
+      <div class="muted">Use a private GitHub repository as a Postbox-style writing archive.</div>
+    </section>
+    <section>
+      <form method="post" action="{url_for('github_save')}">
+        <p>Repository</p>
+        <input name="repo" value="{repo}" placeholder="owner/repository">
+        <button>Save Repository</button>
+      </form>
+    </section>
+    <section>
+      <form method="post" action="{url_for('github_key')}"><button>Generate SSH Key</button></form>
+      <p class="muted">Copy this public key into GitHub repository Settings > Deploy keys. Enable Allow write access.</p>
+      {key_block}
+    </section>
+    <section class="row">
+      <form method="post" action="{url_for('github_test')}"><button>Test Connection</button></form>
+      <form method="post" action="{url_for('github_connect')}"><button>Connect Docs Folder</button></form>
+      <form method="post" action="{url_for('github_sync_now')}"><button>Sync Now</button></form>
+    </section>
+    """
+    return page(body)
+
+
+@app.post("/github/save")
+def github_save():
+    repo = request.form.get("repo", "").strip()
+    if repo.endswith(".git"):
+        repo = repo[:-4]
+    repo = repo.replace("https://github.com/", "").replace("git@github.com:", "")
+    repo = repo.strip("/")
+    config = load_config()
+    config["github_sync_repo"] = repo
+    config.setdefault("github_sync_ssh_key", "/home/ize/.ssh/ize_ribbon_github_ed25519")
+    save_config(config)
+    return redirect(url_for("github_page", message=f"Repository saved: {repo}"))
+
+
+@app.post("/github/key")
+def github_key():
+    result = generate_ssh_key()
+    message = "SSH key is ready." if result.returncode == 0 else (result.stderr or "Failed to generate SSH key.")
+    return redirect(url_for("github_page", message=message[-1200:]))
+
+
+@app.post("/github/test")
+def github_test():
+    result = test_github_connection()
+    output = (result.stdout + result.stderr).strip()
+    return redirect(url_for("github_page", message=output[-1200:] or f"Exit code: {result.returncode}"))
+
+
+@app.post("/github/connect")
+def github_connect():
+    message = configure_docs_repo()
+    return redirect(url_for("github_page", message=message[-2000:]))
+
+
+@app.post("/github/sync")
+def github_sync_now():
+    request_git_sync()
+    return redirect(url_for("github_page", message="Sync requested. It will run in the background when Wi-Fi is available."))
 
 
 @app.get("/bluetooth")

@@ -1,5 +1,6 @@
 {
   "title": "Ize Ribbon",
+  "version": "2.0",
   "document": "docs/note0001.txt",
   "display_module": "epd2in13_V4",
   "font_ko": "fonts/DungGeunMo.ttf",
@@ -68,6 +69,7 @@
   "battery_source": "auto",
   "battery_manual_text": "--%",
   "assume_external_power_when_unknown": true,
+  "github_sync_repo": "ize-studio/ribbon-writing",
   "github_sync_ssh_key": "/home/ize/.ssh/ize_ribbon_github_ed25519",
   "usb_export_image": "/home/ize/ize-ribbon/usb_share.img",
   "usb_export_mount": "/home/ize/ize-ribbon/usb_share",
