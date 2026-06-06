@@ -31,12 +31,19 @@ The fallback access point is intended for first-time local setup and recovery. U
 - USB export image: `/home/ize/ize-ribbon/usb_share.img`
 - Activity file: `/run/ize-ribbon/activity`
 
-## Required Files
+## Included Files To Check
 
-Add these font files to `fonts/` before installation:
+The repository includes the required font files:
 
 - `DungGeunMo.ttf`
 - `NotoSansMono-Regular.ttf`
+
+After cloning or copying the project, confirm they exist:
+
+```bash
+ls /home/ize/ize-ribbon/fonts/DungGeunMo.ttf
+ls /home/ize/ize-ribbon/fonts/NotoSansMono-Regular.ttf
+```
 
 The Waveshare e-Paper Python library is not bundled. The systemd service expects it at:
 
@@ -53,7 +60,7 @@ Copying this folder alone is not enough. A working device needs:
 1. Raspberry Pi OS Lite installed and bootable.
 2. User, hostname, SSH, and optionally Wi-Fi configured.
 3. Waveshare e-Paper Python library available on the Pi.
-4. Required fonts copied into `fonts/`.
+4. Included font files present in `fonts/`.
 5. This repository copied or cloned to `/home/ize/ize-ribbon`.
 6. `sudo bash scripts/install_pi.sh` run once.
 7. A reboot or service restart.
@@ -151,18 +158,13 @@ Or copy the project folder manually so that this path exists:
 /home/ize/ize-ribbon
 ```
 
-### 5. Add required fonts
+### 5. Confirm included fonts
 
-Copy these files into:
+The font files should already be present after cloning this repository:
 
 ```text
 /home/ize/ize-ribbon/fonts
 ```
-
-Required files:
-
-- `DungGeunMo.ttf`
-- `NotoSansMono-Regular.ttf`
 
 Check:
 
@@ -170,6 +172,8 @@ Check:
 ls /home/ize/ize-ribbon/fonts/DungGeunMo.ttf
 ls /home/ize/ize-ribbon/fonts/NotoSansMono-Regular.ttf
 ```
+
+If either file is missing, the repository copy is incomplete.
 
 ### 6. Run the installer
 
