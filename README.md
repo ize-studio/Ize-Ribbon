@@ -14,11 +14,11 @@ The fallback access point is intended for first-time local setup and recovery. U
 
 ## Hardware
 
-- Raspberry Pi Zero 2 W
-- Waveshare 2.13 inch e-Paper HAT, V4 driver
+- Raspberry Pi Zero 2 W(https://amzn.to/4uDz8aB)
+- Waveshare 2.13 inch e-Paper HAT, V4 driver(https://amzn.to/4xv47bx)
 - Bluetooth keyboard or USB keyboard
 - MicroSD with Raspberry Pi OS Lite
-- Optional battery or UPS board with INA219-compatible voltage sensor
+- Optional battery or UPS board with INA219-compatible voltage sensor(https://amzn.to/4xdlUUi)
 
 ## Default Paths
 
