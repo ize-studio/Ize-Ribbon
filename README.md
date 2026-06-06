@@ -1,3 +1,5 @@
+
+
 # Ize Ribbon
 
 Version 2.0
@@ -726,3 +728,9 @@ git log --oneline -5
 - Wi-Fi setup AP fallback
 - Safer new-document cache handling
 - Sleep/power-off notice before shutdown
+
+ <div class="site-support" aria-label="Support">
+        <img class="site-support-logo" src="https://storage.ko-fi.com/cdn/logomarkLogo.png" alt="Ko-fi">
+        <p>I build strange little writing tools.<br>If you enjoyed this project, coffee support is welcome.</p>
+        <p>Ko-fi: <a href="https://ko-fi.com/dievesa">https://ko-fi.com/dievesa</a></p>
+      </div>
