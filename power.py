@@ -4,13 +4,22 @@ import time
 from config_store import update_activity
 
 
+SHUTDOWN_NOTICE_SECONDS = 10
+
+
+def shutdown_after_notice() -> None:
+    time.sleep(SHUTDOWN_NOTICE_SECONDS)
+    subprocess.run(["sudo", "shutdown", "-h", "now"], check=False)
+
+
 def shutdown_now() -> None:
     update_activity()
-    try:
-        from display import show_message
+    result = subprocess.run(["pkill", "-USR1", "-u", "ize", "-f", "/home/ize/ize-ribbon/app.py"], check=False)
+    if result.returncode != 0:
+        try:
+            from display import show_message
 
-        show_message("sleep...")
-        time.sleep(2)
-    except Exception:
-        pass
-    subprocess.run(["sudo", "shutdown", "-h", "now"], check=False)
+            show_message(["Sleeping", "Power off"])
+        except Exception:
+            pass
+    shutdown_after_notice()

@@ -1,6 +1,7 @@
 import time
 from pathlib import Path
 
+from battery import external_power_connected
 from config_store import load_config
 from power import shutdown_now
 
@@ -25,8 +26,11 @@ def main() -> None:
     while True:
         config = load_config()
         enabled = bool(config.get("idle_shutdown_enabled", True))
-        seconds = int(config.get("idle_shutdown_seconds", 300))
+        seconds = int(config.get("idle_shutdown_seconds", 1800))
         activity_file = Path(config.get("activity_file", "/run/ize-ribbon/activity"))
+        if external_power_connected():
+            time.sleep(5)
+            continue
         if enabled and seconds > 0 and time.time() - last_activity(activity_file) >= seconds:
             shutdown_now()
             return

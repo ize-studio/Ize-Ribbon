@@ -1,15 +1,16 @@
-from pathlib import Path
+import time
 
+from evdev_keys import keyboard_event_paths
 
-KEYBOARD_HINTS = ("keyboard", "kbd")
+_CACHE_TIME = 0.0
+_CACHE_VALUE = False
 
 
 def keyboard_connected() -> bool:
-    by_id = Path("/dev/input/by-id")
-    if not by_id.exists():
-        return False
-    try:
-        names = " ".join(p.name.lower() for p in by_id.iterdir())
-    except OSError:
-        return False
-    return any(hint in names for hint in KEYBOARD_HINTS)
+    global _CACHE_TIME, _CACHE_VALUE
+    now = time.time()
+    if now - _CACHE_TIME < 5:
+        return _CACHE_VALUE
+    _CACHE_VALUE = bool(keyboard_event_paths())
+    _CACHE_TIME = now
+    return _CACHE_VALUE

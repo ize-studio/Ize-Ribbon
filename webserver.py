@@ -3,10 +3,11 @@ from html import escape
 
 from flask import Flask, redirect, render_template_string, request, send_file, url_for
 
-from bluetooth import connect_device, devices, scan_for_devices
+from bluetooth import adapter_status, connect_device, connected_devices, devices, remembered_devices, scan_for_devices
 from config_store import ROOT, load_config, save_config, update_activity
 from documents import counts, list_documents, new_document, preview, read_text, set_current_document, write_text
-from language import set_selected_languages
+from language import current_language, set_selected_languages
+from network_status import active_ssid, primary_ip
 from power import shutdown_now
 from wifi import connect_wifi, visible_networks
 
@@ -34,6 +35,7 @@ PAGE = """
     button, a.button { display: inline-block; padding: 8px 12px; border: 1px solid #222; background: white; color: #111; text-decoration: none; cursor: pointer; }
     input, select { padding: 7px; min-width: 220px; }
     textarea { width: 100%; min-height: 45vh; font: 16px/1.45 ui-monospace, monospace; }
+    pre { white-space: pre-wrap; padding: 10px 12px; background: #fff; border: 1px solid #ddd; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .muted { color: #666; }
     .notice { padding: 10px 12px; background: #fff; border-left: 4px solid #111; }
@@ -55,6 +57,40 @@ def page(body: str) -> str:
     return render_template_string(PAGE, body=body)
 
 
+def notice_from_query() -> str:
+    message = request.args.get("message", "")
+    if not message:
+        return ""
+    return f"<section class='notice'><pre>{escape(message)}</pre></section>"
+
+
+def status_panel() -> str:
+    config = load_config()
+    port = int(config.get("web_port", 8080))
+    ip = primary_ip()
+    ssid = active_ssid()
+    connected = connected_devices()
+    if connected:
+        bluetooth_text = ", ".join(escape(item["name"]) for item in connected)
+    else:
+        known = remembered_devices()
+        bluetooth_text = "Not connected"
+        if known:
+            names = ", ".join(escape(item["name"]) for item in known[:3])
+            bluetooth_text += f" (known: {names})"
+    wifi_text = f"{escape(ssid or 'Not connected')}"
+    url_text = f"http://{escape(ip)}:{port}" if ip else "Waiting for IP"
+    input_text = escape(current_language())
+    return f"""
+    <section class="notice">
+      <div><strong>Wi-Fi</strong>: {wifi_text}</div>
+      <div><strong>Web UI</strong>: {url_text}</div>
+      <div><strong>Bluetooth</strong>: {bluetooth_text}</div>
+      <div><strong>Input</strong>: {input_text}</div>
+    </section>
+    """
+
+
 @app.get("/")
 def index():
     config = load_config()
@@ -65,22 +101,24 @@ def index():
         number = path.stem.replace("note", "")
         rows.append(
             f"<tr><td>{number}</td><td>{escape(preview(text, int(config.get('web_preview_chars', 12))))}</td>"
-            f"<td>{chars}자 / {words}단어</td>"
-            f"<td><a class='button' href='{url_for('edit_doc', name=path.name)}'>열기</a> "
-            f"<a class='button' href='{url_for('download_doc', name=path.name)}'>받기</a></td></tr>"
+            f"<td>{chars} chars / {words} words</td>"
+            f"<td><a class='button' href='{url_for('edit_doc', name=path.name)}'>Open</a> "
+            f"<a class='button' href='{url_for('download_doc', name=path.name)}'>Download</a></td></tr>"
         )
     body = f"""
+    {notice_from_query()}
+    {status_panel()}
     <section class="row">
-      <form method="post" action="{url_for('create_doc')}"><button>새 문서 만들기</button></form>
-      <form method="post" action="{url_for('refresh_usb')}"><button>USB export refresh</button></form>
-      <a class="button" href="{url_for('settings')}">설정</a>
-      <a class="button" href="{url_for('bluetooth_page')}">Bluetooth 키보드</a>
+      <form method="post" action="{url_for('create_doc')}"><button>New Document</button></form>
+      <form method="post" action="{url_for('refresh_usb')}"><button>Refresh USB Export</button></form>
+      <a class="button" href="{url_for('settings')}">Settings</a>
+      <a class="button" href="{url_for('bluetooth_page')}">Bluetooth Keyboard</a>
       <a class="button" href="{url_for('wifi_page')}">Wi-Fi</a>
       <form method="post" action="{url_for('power_off')}"><button>Power Off</button></form>
     </section>
     <section>
       <table>
-        <thead><tr><th>번호</th><th>미리보기</th><th>분량</th><th></th></tr></thead>
+        <thead><tr><th>No.</th><th>Preview</th><th>Length</th><th></th></tr></thead>
         <tbody>{''.join(rows)}</tbody>
       </table>
     </section>
@@ -101,12 +139,12 @@ def edit_doc(name: str):
         return ("not found", 404)
     text = escape(read_text(path))
     body = f"""
-    <section><a class="button" href="{url_for('index')}">목록</a></section>
+    <section><a class="button" href="{url_for('index')}">Back</a></section>
     <form method="post">
       <textarea name="text">{text}</textarea>
       <p class="row">
-        <button>저장</button>
-        <button name="open" value="1">저장하고 현재 문서로 열기</button>
+        <button>Save</button>
+        <button name="open" value="1">Save and Open on Device</button>
       </p>
     </form>
     """
@@ -145,29 +183,28 @@ def settings():
         disabled = "disabled" if item["code"] == "EN" else ""
         checks.append(f"<label><input type='checkbox' name='language' value='{code}' {checked} {disabled}> {code} {label}</label>")
     body = f"""
-    <section><a class="button" href="{url_for('index')}">목록</a></section>
+    <section><a class="button" href="{url_for('index')}">Back</a></section>
     <form method="post">
-      <p>카운트</p>
+      <p>Counter</p>
       <select name="count_mode">
         <option value="off" {'selected' if config.get('count_mode') == 'off' else ''}>OFF</option>
-        <option value="words" {'selected' if config.get('count_mode') == 'words' else ''}>단어</option>
-        <option value="chars" {'selected' if config.get('count_mode') == 'chars' else ''}>글자</option>
+        <option value="words" {'selected' if config.get('count_mode') == 'words' else ''}>Words</option>
+        <option value="chars" {'selected' if config.get('count_mode') == 'chars' else ''}>Characters</option>
       </select>
-      <p>자동잠자기</p>
+      <p>Auto Off</p>
       <select name="idle_seconds">
-        {''.join(f"<option value='{v}' {'selected' if int(config.get('idle_shutdown_seconds', 300)) == v and config.get('idle_shutdown_enabled', True) else ''}>{label}</option>" for label, v in [('1분',60),('5분',300),('10분',600),('30분',1800),('1시간',3600)])}
-        <option value="0" {'selected' if not config.get('idle_shutdown_enabled', True) else ''}>OFF</option>
+        {''.join(f"<option value='{v}' {'selected' if int(config.get('idle_shutdown_seconds', 1800)) == v and config.get('idle_shutdown_enabled', True) else ''}>{label}</option>" for label, v in [('10 min',600),('30 min',1800),('60 min',3600)])}
       </select>
-      <p>배터리 표시</p>
+      <p>Battery Display</p>
       <select name="battery_source">
         <option value="manual" {'selected' if config.get('battery_source') == 'manual' else ''}>manual</option>
         <option value="auto" {'selected' if config.get('battery_source') == 'auto' else ''}>auto</option>
       </select>
       <input name="battery_manual_text" value="{escape(config.get('battery_manual_text', '--%'))}" maxlength="8">
-      <p>언어 선택</p>
-      <p class="muted">EN은 항상 첫 번째로 고정됩니다. 아래 지원 후보 전체 중에서 EN을 포함해 최대 5개까지 사용할 수 있습니다.</p>
+      <p>Input Languages</p>
+      <p class="muted">EN is always fixed as the first slot. Select up to five languages including EN.</p>
       <div>{''.join(checks)}</div>
-      <p><button>저장</button></p>
+      <p><button>Save</button></p>
     </form>
     """
     return page(body)
@@ -177,7 +214,7 @@ def settings():
 def save_settings():
     config = load_config()
     config["count_mode"] = request.form.get("count_mode", "chars")
-    idle = int(request.form.get("idle_seconds", "300"))
+    idle = int(request.form.get("idle_seconds", "1800"))
     config["idle_shutdown_enabled"] = idle != 0
     config["idle_shutdown_seconds"] = idle
     config["battery_source"] = request.form.get("battery_source", "manual")
@@ -190,32 +227,42 @@ def save_settings():
 
 @app.get("/bluetooth")
 def bluetooth_page():
+    status = escape(adapter_status())
     rows = []
     for item in devices():
-        name = escape(item["name"])
+        raw_name = item["name"]
+        name = escape(raw_name)
         mac = escape(item["mac"])
+        label = "Unnamed device" if raw_name.replace("-", ":").upper() == item["mac"].upper() else name
         rows.append(
-            f"<tr><td>{name}</td><td>{mac}</td>"
-            f"<td><form method='post' action='{url_for('bluetooth_connect')}'><input type='hidden' name='mac' value='{mac}'><button>연결</button></form></td></tr>"
+            f"<tr><td>{label}<div class='muted'>{mac}</div></td>"
+            f"<td><form method='post' action='{url_for('bluetooth_connect')}'><input type='hidden' name='mac' value='{mac}'><button>Connect</button></form></td></tr>"
         )
+    if not rows:
+        rows.append("<tr><td colspan='2' class='muted'>No Bluetooth devices found yet. Put the keyboard in pairing mode and press Scan.</td></tr>")
     body = f"""
-    <section><a class="button" href="{url_for('index')}">목록</a></section>
-    <section class="notice">키보드를 페어링 모드로 둔 뒤 스캔을 누르십시오. 스캔은 약 10초 동안 실행됩니다.</section>
+    <section><a class="button" href="{url_for('index')}">Back</a></section>
+    {notice_from_query()}
+    <section class="notice">Put the keyboard in pairing mode, press Scan, then connect from the list. You do not need to know the MAC address.</section>
     <section class="row">
-      <form method="post" action="{url_for('bluetooth_scan')}"><button>스캔</button></form>
+      <form method="post" action="{url_for('bluetooth_scan')}"><button>Scan</button></form>
     </section>
     <section>
       <table>
-        <thead><tr><th>이름</th><th>MAC</th><th></th></tr></thead>
+        <thead><tr><th>Device</th><th></th></tr></thead>
         <tbody>{''.join(rows)}</tbody>
       </table>
     </section>
     <section>
       <form method="post" action="{url_for('bluetooth_connect')}">
-        <p>목록에 없으면 MAC 주소 입력</p>
+        <p class="muted">Advanced: connect by MAC address only if the device is not listed.</p>
         <input name="mac" placeholder="AA:BB:CC:DD:EE:FF">
         <button>pair / trust / connect</button>
       </form>
+    </section>
+    <section>
+      <p class="muted">Adapter Status</p>
+      <pre>{status}</pre>
     </section>
     """
     return page(body)
@@ -223,32 +270,37 @@ def bluetooth_page():
 
 @app.post("/bluetooth/scan")
 def bluetooth_scan():
-    scan_for_devices()
+    found, output = scan_for_devices()
     update_activity()
-    return redirect(url_for("bluetooth_page"))
+    names = ", ".join(f"{item['name']} ({item['mac']})" for item in found) or "No devices found during this scan."
+    return redirect(url_for("bluetooth_page", message=f"Scan complete. {names}\n\nRaw scan output:\n{output[-2500:]}"))
 
 
 @app.post("/bluetooth/connect")
 def bluetooth_connect():
     mac = request.form.get("mac", "").strip()
+    message = ""
     if mac:
-        connect_device(mac)
+        message = connect_device(mac)
     update_activity()
-    return redirect(url_for("bluetooth_page"))
+    return redirect(url_for("bluetooth_page", message=message[-1200:]))
 
 
 @app.get("/wifi")
 def wifi_page():
-    options = "".join(f"<option value='{escape(ssid)}'>{escape(ssid)}</option>" for ssid in visible_networks())
+    networks = visible_networks()
+    options = "".join(f"<option value='{escape(ssid)}'>{escape(ssid)}</option>" for ssid in networks)
+    if not options:
+        options = "<option value=''>No Wi-Fi networks found</option>"
     body = f"""
-    <section><a class="button" href="{url_for('index')}">목록</a></section>
+    <section><a class="button" href="{url_for('index')}">Back</a></section>
+    {notice_from_query()}
     <form method="post">
       <p>SSID</p>
-      <input name="ssid" list="ssids">
-      <datalist id="ssids">{options}</datalist>
-      <p>비밀번호</p>
+      <select name="ssid">{options}</select>
+      <p>Password</p>
       <input name="password" type="password">
-      <p><button>연결</button></p>
+      <p><button>Connect</button></p>
     </form>
     """
     return page(body)
@@ -258,10 +310,11 @@ def wifi_page():
 def wifi_connect():
     ssid = request.form.get("ssid", "").strip()
     password = request.form.get("password", "")
+    message = ""
     if ssid:
-        connect_wifi(ssid, password)
+        message = connect_wifi(ssid, password)
     update_activity()
-    return redirect(url_for("wifi_page"))
+    return redirect(url_for("wifi_page", message=message[-1200:]))
 
 
 @app.post("/usb/refresh")

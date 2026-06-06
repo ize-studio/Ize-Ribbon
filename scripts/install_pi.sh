@@ -24,6 +24,7 @@ apt install -y \
 
 systemctl enable --now avahi-daemon
 systemctl enable --now bluetooth
+usermod -aG bluetooth,netdev ize || true
 
 install -d -o ize -g ize "$PROJECT/docs" "$PROJECT/fonts" /run/ize-ribbon
 chown -R ize:ize "$PROJECT"
@@ -54,7 +55,7 @@ install -m 0644 "$PROJECT/systemd/ize-ribbon-web.service" /etc/systemd/system/iz
 install -m 0644 "$PROJECT/systemd/ize-ribbon-idle-shutdown.service" /etc/systemd/system/ize-ribbon-idle-shutdown.service
 
 cat >/etc/sudoers.d/ize-ribbon <<'EOF'
-ize ALL=(root) NOPASSWD: /sbin/shutdown, /usr/sbin/shutdown, /bin/bash /home/ize/ize-ribbon/scripts/refresh_usb_export.sh
+ize ALL=(root) NOPASSWD: /sbin/shutdown, /usr/sbin/shutdown, /usr/bin/nmcli, /usr/bin/bluetoothctl, /usr/sbin/rfkill, /bin/bash /home/ize/ize-ribbon/scripts/refresh_usb_export.sh
 EOF
 chmod 0440 /etc/sudoers.d/ize-ribbon
 

@@ -14,6 +14,25 @@ from language import current_language
 
 EPD_WIDTH = 250
 EPD_HEIGHT = 122
+_EPD = None
+_BASE_READY = False
+_FONT_CACHE = {}
+_FONT_PATH_CACHE = {}
+_CHAR_WIDTH_CACHE = {}
+_HANGUL_Y_OFFSET = None
+_STATUS_CACHE = {
+    "title": "Ize Ribbon [EN]",
+    "right": "",
+    "label": "",
+    "count": "",
+}
+
+
+def font_path(font_key: str):
+    if font_key not in _FONT_PATH_CACHE:
+        config = load_config()
+        _FONT_PATH_CACHE[font_key] = project_path(config.get(font_key, ""))
+    return _FONT_PATH_CACHE[font_key]
 
 
 def has_hangul(text: str) -> bool:
@@ -25,38 +44,55 @@ def is_hangul_char(ch: str) -> bool:
 
 
 def font_for_text(text: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    config = load_config()
     font_key = "font_ko" if has_hangul(text) else "font_latin"
-    path = project_path(config.get(font_key, ""))
+    path = font_path(font_key)
+    cache_key = (str(path), size)
+    if cache_key in _FONT_CACHE:
+        return _FONT_CACHE[cache_key]
     try:
-        return ImageFont.truetype(str(path), size)
+        font = ImageFont.truetype(str(path), size)
     except OSError:
-        return ImageFont.load_default()
+        font = ImageFont.load_default()
+    _FONT_CACHE[cache_key] = font
+    return font
 
 
 def font_for_char(ch: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    config = load_config()
     font_key = "font_ko" if is_hangul_char(ch) else "font_latin"
-    path = project_path(config.get(font_key, ""))
+    path = font_path(font_key)
+    cache_key = (str(path), size)
+    if cache_key in _FONT_CACHE:
+        return _FONT_CACHE[cache_key]
     try:
-        return ImageFont.truetype(str(path), size)
+        font = ImageFont.truetype(str(path), size)
     except OSError:
-        return ImageFont.load_default()
+        font = ImageFont.load_default()
+    _FONT_CACHE[cache_key] = font
+    return font
+
+
+def char_width(draw: ImageDraw.ImageDraw, ch: str, size: int) -> float:
+    font = font_for_char(ch, size)
+    cache_key = (ch, size, id(font))
+    if cache_key not in _CHAR_WIDTH_CACHE:
+        _CHAR_WIDTH_CACHE[cache_key] = draw.textlength(ch, font=font)
+    return _CHAR_WIDTH_CACHE[cache_key]
 
 
 def mixed_textlength(draw: ImageDraw.ImageDraw, text: str, size: int) -> float:
-    return sum(draw.textlength(ch, font=font_for_char(ch, size)) for ch in text)
+    return sum(char_width(draw, ch, size) for ch in text)
 
 
 def draw_mixed_text(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, size: int, fill: int = 0) -> None:
-    config = load_config()
-    hangul_y_offset = int(config.get("hangul_y_offset", 2))
+    global _HANGUL_Y_OFFSET
+    if _HANGUL_Y_OFFSET is None:
+        _HANGUL_Y_OFFSET = int(load_config().get("hangul_y_offset", 2))
     x, y = xy
     for ch in text:
         font = font_for_char(ch, size)
-        y_offset = hangul_y_offset if is_hangul_char(ch) else 0
+        y_offset = _HANGUL_Y_OFFSET if is_hangul_char(ch) else 0
         draw.text((x, y + y_offset), ch, fill=fill, font=font)
-        x += draw.textlength(ch, font=font)
+        x += char_width(draw, ch, size)
 
 
 def fit_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> str:
@@ -80,29 +116,33 @@ def fit_mixed_text_short_ellipsis(draw: ImageDraw.ImageDraw, text: str, size: in
 
 def language_badge(code: str) -> str:
     if code == "KO":
-        return "[한]"
+        return "[KO]"
     return f"[{code}]"
 
 
 def visible_body_lines(text: str, draw: ImageDraw.ImageDraw, width: int, max_lines: int, font_size: int | None = None) -> list[str]:
     config = load_config()
     size = font_size or int(config.get("body_font_size", 19))
+    text = text[-int(config.get("display_tail_chars", 320)):]
     lines: list[str] = []
     for source_line in text.splitlines() or [""]:
         current = ""
+        current_width = 0.0
         for ch in source_line:
-            candidate = current + ch
-            if mixed_textlength(draw, candidate, size) <= width:
-                current = candidate
+            ch_width = char_width(draw, ch, size)
+            if current_width + ch_width <= width:
+                current += ch
+                current_width += ch_width
             else:
                 if current:
                     lines.append(current)
                 current = ch
+                current_width = ch_width
         lines.append(current)
     return lines[-max_lines:]
 
 
-def render_image(overlay_lines: list[str] | None = None) -> Image.Image:
+def render_image(overlay_lines: list[str] | None = None, text_override: str | None = None, lightweight: bool = False) -> Image.Image:
     config = load_config()
     width = int(config.get("width", EPD_WIDTH))
     height = int(config.get("height", EPD_HEIGHT))
@@ -118,11 +158,9 @@ def render_image(overlay_lines: list[str] | None = None) -> Image.Image:
     image = Image.new("L", (canvas_width, canvas_height), 255)
     draw = ImageDraw.Draw(image)
 
-    text = read_text()
-    title = f"{config.get('title', 'Ize Ribbon')} {language_badge(current_language())}"
+    text = read_text() if text_override is None else text_override
     status_size = int(config.get("status_font_size", 12)) * scale
     body_size = int(config.get("body_font_size", 19)) * scale
-    status_font = font_for_text(title, status_size)
 
     if invert_status:
         draw.rectangle((0, 0, canvas_width, top_h), fill=0)
@@ -131,15 +169,24 @@ def render_image(overlay_lines: list[str] | None = None) -> Image.Image:
     status_fill = 255 if invert_status else 0
     separator_fill = 255 if invert_status else 0
 
-    right_parts = []
-    if not keyboard_connected():
-        right_parts.append("[No KBD]")
-    right_parts.append(battery_text())
-    right = " ".join(right_parts)
+    if lightweight:
+        title = _STATUS_CACHE["title"]
+        right = _STATUS_CACHE["right"]
+    else:
+        title = f"{config.get('title', 'Ize Ribbon')} {language_badge(current_language())}"
+        right_parts = []
+        if not keyboard_connected():
+            right_parts.append("[No KBD]")
+        right_parts.append(battery_text())
+        right = " ".join(right_parts)
+        _STATUS_CACHE["title"] = title
+        _STATUS_CACHE["right"] = right
+    status_font = font_for_text(title, status_size)
     right_w = mixed_textlength(draw, right, status_size)
     left = fit_text(draw, title, status_font, canvas_width - margin * 3 - int(right_w))
     draw_mixed_text(draw, (margin, 2 * scale), left, status_size, fill=status_fill)
-    draw_mixed_text(draw, (canvas_width - margin - right_w, 2 * scale), right, status_size, fill=status_fill)
+    if right:
+        draw_mixed_text(draw, (canvas_width - margin - right_w, 2 * scale), right, status_size, fill=status_fill)
     if not invert_status:
         draw.line((0, top_h, canvas_width, top_h), fill=separator_fill, width=scale)
 
@@ -158,16 +205,20 @@ def render_image(overlay_lines: list[str] | None = None) -> Image.Image:
 
     if not invert_status:
         draw.line((0, canvas_height - bottom_h, canvas_width, canvas_height - bottom_h), fill=separator_fill, width=scale)
-    label = note_label(current_document(), int(config.get("bottom_preview_chars", 16)))
-    chars, words = counts(text)
-    mode = config.get("count_mode", "chars")
-    count_text = ""
-    if mode == "chars":
-        count_text = str(chars)
-    elif mode == "words":
-        count_text = str(words)
-    label_font = font_for_text(label, status_size)
-    count_font = font_for_text(count_text, status_size)
+    if lightweight:
+        label = _STATUS_CACHE["label"]
+        count_text = _STATUS_CACHE["count"]
+    else:
+        label = note_label(current_document(), int(config.get("bottom_preview_chars", 16)))
+        chars, words = counts(text)
+        mode = config.get("count_mode", "chars")
+        count_text = ""
+        if mode == "chars":
+            count_text = str(chars)
+        elif mode == "words":
+            count_text = str(words)
+        _STATUS_CACHE["label"] = label
+        _STATUS_CACHE["count"] = count_text
     max_label_width = canvas_width - margin * 3
     if count_text:
         max_label_width -= int(mixed_textlength(draw, count_text, status_size))
@@ -182,24 +233,52 @@ def render_image(overlay_lines: list[str] | None = None) -> Image.Image:
     return image.point(lambda p: 0 if p < threshold else 255, "1")
 
 
-def send_image(image: Image.Image) -> None:
-    try:
-        lib_dir = os.environ.get("WAVESHARE_LIB_DIR")
-        if lib_dir and lib_dir not in sys.path:
-            sys.path.insert(0, lib_dir)
-        from waveshare_epd import epd2in13_V4
+def epd_device():
+    global _EPD
+    if _EPD is not None:
+        return _EPD
+    lib_dir = os.environ.get("WAVESHARE_LIB_DIR")
+    if lib_dir and lib_dir not in sys.path:
+        sys.path.insert(0, lib_dir)
+    from waveshare_epd import epd2in13_V4
 
-        epd = epd2in13_V4.EPD()
-        epd.init()
-        epd.display(epd.getbuffer(image))
+    _EPD = epd2in13_V4.EPD()
+    _EPD.init()
+    return _EPD
+
+
+def send_image(image: Image.Image, partial: bool = False) -> None:
+    global _BASE_READY
+    try:
+        rotation = int(load_config().get("display_rotation", 0)) % 360
+        if rotation == 180:
+            image = image.rotate(180)
+        epd = epd_device()
+        buffer = epd.getbuffer(image)
+        if _BASE_READY and hasattr(epd, "displayPartial"):
+            epd.displayPartial(buffer)
+        elif not _BASE_READY and hasattr(epd, "displayPartBaseImage"):
+            epd.displayPartBaseImage(buffer)
+            _BASE_READY = True
+        elif hasattr(epd, "display_fast"):
+            epd.display_fast(buffer)
+            _BASE_READY = True
+        else:
+            epd.display(buffer)
+            _BASE_READY = True
     except Exception:
         preview_path = ROOT / "last_render.png"
         image.save(preview_path)
         print(f"Display fallback wrote {preview_path}")
 
 
-def show(overlay_lines: list[str] | None = None) -> None:
-    send_image(render_image(overlay_lines))
+def show(
+    overlay_lines: list[str] | None = None,
+    partial: bool = False,
+    text_override: str | None = None,
+    lightweight: bool = False,
+) -> None:
+    send_image(render_image(overlay_lines, text_override=text_override, lightweight=lightweight), partial=partial)
 
 
 def show_message(message: str | list[str]) -> None:
