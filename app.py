@@ -166,8 +166,8 @@ def terminal_escape_keys() -> dict[str, str]:
     return keys
 
 
-def drain_tty_pending() -> None:
-    deadline = time.time() + 0.08
+def drain_tty_pending(seconds: float = 0.08) -> None:
+    deadline = time.time() + seconds
     while time.time() < deadline and select.select([sys.stdin], [], [], 0)[0]:
         sys.stdin.read(1)
 
@@ -278,12 +278,11 @@ def read_key() -> str | None:
     return ch
 
 
-def read_menu_key(evdev: EvdevKeyReader) -> str | None:
-    key = evdev.read_key(0.05)
-    if key is not None:
-        drain_tty_pending()
-        return key
-    return read_key()
+def read_text_key() -> str | None:
+    key = read_key()
+    if key in ("esc", "up", "down", "left", "right", "enter", "backspace"):
+        return None
+    return key
 
 
 def wait_for_startup_ready() -> bool:
@@ -345,10 +344,11 @@ def main() -> None:
                 sync_message(_SHUTDOWN_LINES)
                 time.sleep(2)
                 return
-            if menu.mode != "writing":
-                key = read_menu_key(evdev)
-            else:
-                key = read_key()
+            key = evdev.read_key(0.05)
+            if key is not None:
+                drain_tty_pending(0.25)
+            elif menu.mode == "writing":
+                key = read_text_key()
             if key is None:
                 continue
             immediate_render = True
@@ -373,8 +373,8 @@ def main() -> None:
                 continue
             if key == "esc":
                 menu.open()
-                drain_tty_pending()
-                evdev.drain(0.12)
+                drain_tty_pending(0.25)
+                evdev.drain(0.2)
             elif key == "ctrl_space":
                 cycle_language()
             elif key == "ctrl_n":
