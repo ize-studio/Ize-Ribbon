@@ -46,20 +46,167 @@ The Waveshare e-Paper Python library is not bundled. The systemd service expects
 
 If your path is different, update `WAVESHARE_LIB_DIR` in `systemd/ize-ribbon.service`.
 
-## Installation
+## Installation Overview
 
-Flash Raspberry Pi OS Lite, create user `ize`, enable SSH, set hostname `ize-ribbon`, and configure Wi-Fi if available.
+Copying this folder alone is not enough. A working device needs:
 
-Copy this repository to the Pi:
+1. Raspberry Pi OS Lite installed and bootable.
+2. User, hostname, SSH, and optionally Wi-Fi configured.
+3. Waveshare e-Paper Python library available on the Pi.
+4. Required fonts copied into `fonts/`.
+5. This repository copied or cloned to `/home/ize/ize-ribbon`.
+6. `sudo bash scripts/install_pi.sh` run once.
+7. A reboot or service restart.
+
+After `install_pi.sh` finishes, systemd starts the Web UI and e-paper writing app automatically at boot.
+
+## Fresh Raspberry Pi Setup
+
+These steps describe a new Raspberry Pi Zero 2 W setup from an empty microSD card.
+
+### 1. Flash Raspberry Pi OS Lite
+
+Use Raspberry Pi Imager.
+
+Recommended settings:
+
+- OS: Raspberry Pi OS Lite, 32-bit
+- Hostname: `ize-ribbon`
+- Username: `ize`
+- Password: choose your own password
+- SSH: enabled
+- Wi-Fi: configure if available
+- Locale/timezone: your local setting
+
+Boot the Pi and wait until SSH is available.
+
+From your computer:
+
+```bash
+ssh ize@ize-ribbon.local
+```
+
+If mDNS does not work, find the Pi IP from your router and use:
+
+```bash
+ssh ize@<device-ip>
+```
+
+### 2. Install system packages
+
+On the Pi:
+
+```bash
+sudo apt update
+sudo apt install -y git python3-pip python3-pil python3-flask python3-smbus2 network-manager bluez bluetooth rfkill
+```
+
+`install_pi.sh` also installs and enables project services, but installing common packages first makes setup failures easier to understand.
+
+### 3. Install or copy the Waveshare e-Paper library
+
+The default service file expects:
+
+```text
+/home/ize/e-Paper/RaspberryPi_JetsonNano/python/lib
+```
+
+One common setup is:
+
+```bash
+cd /home/ize
+git clone https://github.com/waveshareteam/e-Paper.git
+```
+
+Confirm the driver file exists:
+
+```bash
+ls /home/ize/e-Paper/RaspberryPi_JetsonNano/python/lib/waveshare_epd/epd2in13_V4.py
+```
+
+If your Waveshare library is somewhere else, edit:
+
+```text
+/home/ize/ize-ribbon/systemd/ize-ribbon.service
+```
+
+and change:
+
+```text
+Environment=WAVESHARE_LIB_DIR=/home/ize/e-Paper/RaspberryPi_JetsonNano/python/lib
+```
+
+### 4. Copy or clone Ize Ribbon
+
+Recommended:
+
+```bash
+cd /home/ize
+git clone https://github.com/ize-studio/Ize-Ribbon.git ize-ribbon
+```
+
+Or copy the project folder manually so that this path exists:
+
+```text
+/home/ize/ize-ribbon
+```
+
+### 5. Add required fonts
+
+Copy these files into:
+
+```text
+/home/ize/ize-ribbon/fonts
+```
+
+Required files:
+
+- `DungGeunMo.ttf`
+- `NotoSansMono-Regular.ttf`
+
+Check:
+
+```bash
+ls /home/ize/ize-ribbon/fonts/DungGeunMo.ttf
+ls /home/ize/ize-ribbon/fonts/NotoSansMono-Regular.ttf
+```
+
+### 6. Run the installer
 
 ```bash
 cd /home/ize/ize-ribbon
 sudo bash scripts/install_pi.sh
 ```
 
-Optional USB text export:
+This installs systemd service files, enables the app and web server, and prepares the device to start automatically at boot.
+
+### 7. Enable I2C if you use the battery voltage sensor
+
+If your device uses an INA219-compatible battery voltage sensor, enable I2C:
 
 ```bash
+sudo raspi-config
+```
+
+Then go to:
+
+```text
+Interface Options > I2C > Enable
+```
+
+Also make sure `i2c-dev` loads at boot:
+
+```bash
+echo i2c-dev | sudo tee /etc/modules-load.d/i2c-dev.conf
+sudo usermod -aG i2c ize
+```
+
+Reboot after changing groups or I2C settings.
+
+### 8. Optional USB text export
+
+```bash
+cd /home/ize/ize-ribbon
 sudo bash scripts/setup_usb_gadget.sh
 sudo reboot
 ```
@@ -70,6 +217,156 @@ After reboot, the device starts these services:
 - `ize-ribbon-web.service`: Web UI on port `8080`
 - `ize-ribbon-idle-shutdown.service`: idle power manager
 - `ize-ribbon-network-fallback.service`: Wi-Fi setup fallback
+
+### 9. Reboot and verify
+
+Reboot:
+
+```bash
+sudo reboot
+```
+
+After boot, the e-paper display should show startup/network/keyboard status, then the writing screen once a keyboard is available.
+
+Open the Web UI:
+
+```text
+http://ize-ribbon.local:8080
+```
+
+or:
+
+```text
+http://<device-ip>:8080
+```
+
+Check services:
+
+```bash
+systemctl is-active ize-ribbon.service
+systemctl is-active ize-ribbon-web.service
+systemctl is-active ize-ribbon-idle-shutdown.service
+```
+
+All should print:
+
+```text
+active
+```
+
+## First Boot Checklist
+
+Use this checklist when the device does not appear to be working after installation.
+
+### Web UI does not open
+
+Check service:
+
+```bash
+systemctl status ize-ribbon-web.service
+journalctl -u ize-ribbon-web.service -n 80 --no-pager
+```
+
+Check IP:
+
+```bash
+hostname -I
+```
+
+Try:
+
+```text
+http://<device-ip>:8080
+```
+
+If Wi-Fi is not connected, connect to the setup AP:
+
+```text
+SSID: Ize-Ribbon
+Password: izeribbon
+Web UI: http://10.42.0.1:8080
+```
+
+### E-paper display does not update
+
+Check main service:
+
+```bash
+systemctl status ize-ribbon.service
+journalctl -u ize-ribbon.service -n 120 --no-pager
+```
+
+Check Waveshare library path:
+
+```bash
+ls /home/ize/e-Paper/RaspberryPi_JetsonNano/python/lib/waveshare_epd/epd2in13_V4.py
+```
+
+Check SPI:
+
+```bash
+ls /dev/spidev*
+```
+
+If missing, enable SPI:
+
+```bash
+sudo raspi-config
+```
+
+Then:
+
+```text
+Interface Options > SPI > Enable
+```
+
+### Keyboard is not detected
+
+Check Linux input devices:
+
+```bash
+cat /proc/bus/input/devices | grep -i -A4 keyboard
+ls /dev/input/event*
+```
+
+For Bluetooth keyboards, use the Web UI `Bluetooth Keyboard` page to scan and connect.
+
+For USB keyboards, plug the keyboard in and restart the app if needed:
+
+```bash
+sudo systemctl restart ize-ribbon.service
+```
+
+### Wi-Fi is not connected
+
+Open the Web UI setup AP, or use:
+
+```bash
+nmcli dev wifi list
+nmcli dev wifi connect "<ssid>" password "<password>"
+```
+
+The device can still be used for writing when a keyboard is connected, even without Wi-Fi.
+
+### GitHub Sync does not work
+
+In the Web UI, open `GitHub Sync` and check:
+
+1. Repository is `owner/repository`.
+2. SSH key exists.
+3. Public key is added to GitHub repository `Deploy keys`.
+4. `Allow write access` is enabled.
+5. `Test Connection` succeeds.
+6. `Connect Docs Folder` has been pressed.
+
+Manual check:
+
+```bash
+cd /home/ize/ize-ribbon/docs
+git status
+git remote -v
+ssh -i /home/ize/.ssh/ize_ribbon_github_ed25519 -T git@github.com
+```
 
 ## Startup Behavior
 
