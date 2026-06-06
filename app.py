@@ -278,6 +278,14 @@ def read_key() -> str | None:
     return ch
 
 
+def read_menu_key(evdev: EvdevKeyReader) -> str | None:
+    key = evdev.read_key(0.05)
+    if key is not None:
+        drain_tty_pending()
+        return key
+    return read_key()
+
+
 def wait_for_startup_ready() -> bool:
     last_lines: list[str] | None = None
     last_refresh = 0.0
@@ -338,9 +346,7 @@ def main() -> None:
                 time.sleep(2)
                 return
             if menu.mode != "writing":
-                key = evdev.read_key(0.05)
-                if key is not None:
-                    drain_tty_pending()
+                key = read_menu_key(evdev)
             else:
                 key = read_key()
             if key is None:
