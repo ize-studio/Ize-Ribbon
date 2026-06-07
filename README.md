@@ -7,6 +7,7 @@ Version 2.0
 Ize Ribbon is a Raspberry Pi Zero 2 W based writing device with a Waveshare 2.13 inch e-Paper HAT, Bluetooth or USB keyboard input, a local Web UI, Wi-Fi setup, Korean input, automatic power handling, and optional private GitHub repository sync.
 
 The device is designed to keep writing local and fast. Network, GitHub, USB export, and web editing features run around the writing flow instead of blocking typing.
+if you are looking for thd Ize-Compose, go to https://github.com/ize-studio/ize-compose
 
 ## Security Notes
 
