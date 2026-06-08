@@ -1,7 +1,9 @@
-import subprocess
-import time
+import os
+import pty
 import re
 import select
+import subprocess
+import time
 
 from config_store import ROOT
 
@@ -20,6 +22,18 @@ def _clean_output(text: str) -> str:
     return ANSI_RE.sub("", text).replace("\r", "")
 
 
+def _agent_setup_commands(agent: str = "KeyboardDisplay") -> str:
+    return (
+        "power on\n"
+        "pairable on\n"
+        "discoverable on\n"
+        "pairable-timeout 0\n"
+        "discoverable-timeout 0\n"
+        f"agent {agent}\n"
+        "default-agent\n"
+    )
+
+
 def ensure_bluetooth_ready(force: bool = False) -> None:
     global _READY_CACHE_TIME
     now = time.time()
@@ -28,7 +42,7 @@ def ensure_bluetooth_ready(force: bool = False) -> None:
     subprocess.run(["sudo", "/usr/sbin/rfkill", "unblock", "bluetooth"], text=True, capture_output=True, timeout=10)
     subprocess.run(
         bluetoothctl_args(),
-        input="power on\npairable on\nagent KeyboardDisplay\ndefault-agent\nquit\n",
+        input=_agent_setup_commands() + "quit\n",
         text=True,
         capture_output=True,
         timeout=20,
@@ -65,47 +79,63 @@ def _run_bluetoothctl(commands: str, timeout: int = 30) -> str:
 
 
 def _interactive_pair(mac: str, pin: str, agent: str, timeout: int = 25) -> str:
+    master_fd, slave_fd = pty.openpty()
     proc = subprocess.Popen(
         bluetoothctl_args(),
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        text=False,
+        close_fds=True,
     )
-    assert proc.stdin is not None
-    assert proc.stdout is not None
+    os.close(slave_fd)
     output_parts: list[str] = []
+    confirm_sent = False
+    authorize_sent = False
+    pin_sent = False
 
     def send(command: str) -> None:
-        proc.stdin.write(command + "\n")
-        proc.stdin.flush()
+        os.write(master_fd, (command + "\n").encode("utf-8", errors="ignore"))
 
-    send("power on")
-    send("pairable on")
-    send(f"agent {agent}")
-    send("default-agent")
+    for command in _agent_setup_commands(agent).splitlines():
+        if command:
+            send(command)
     send(f"pair {mac}")
 
     deadline = time.time() + timeout
     while time.time() < deadline:
-        ready, _, _ = select.select([proc.stdout], [], [], 0.5)
+        ready, _, _ = select.select([master_fd], [], [], 0.5)
         if not ready:
             if device_connected(mac):
                 break
             continue
-        line = proc.stdout.readline()
-        if not line:
+        try:
+            chunk = os.read(master_fd, 4096)
+        except OSError:
             break
-        clean = _clean_output(line)
+        if not chunk:
+            break
+        clean = _clean_output(chunk.decode("utf-8", errors="ignore"))
         output_parts.append(clean)
-        lowered = clean.lower()
-        if "confirm passkey" in lowered or "accept pairing" in lowered or "[agent] confirm passkey" in lowered:
+        lowered = "".join(output_parts[-8:]).lower()
+        if not confirm_sent and (
+            "confirm passkey" in lowered
+            or "accept pairing" in lowered
+            or "[agent] confirm passkey" in lowered
+            or "confirm yes/no" in lowered
+        ):
             send("yes")
-        elif "authorize service" in lowered or "[agent] authorize service" in lowered:
+            confirm_sent = True
+        elif not authorize_sent and ("authorize service" in lowered or "[agent] authorize service" in lowered):
             send("yes")
-        elif ("enter pin code" in lowered or "request pin code" in lowered or "request passkey" in lowered) and pin:
+            authorize_sent = True
+        elif (
+            not pin_sent
+            and ("enter pin code" in lowered or "request pin code" in lowered or "request passkey" in lowered)
+            and pin
+        ):
             send(pin)
+            pin_sent = True
         elif "pairing successful" in lowered or "paired: yes" in lowered:
             break
 
@@ -114,11 +144,26 @@ def _interactive_pair(mac: str, pin: str, agent: str, timeout: int = 25) -> str:
     send(f"info {mac}")
     send("quit")
     try:
-        tail, _ = proc.communicate(timeout=10)
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            ready, _, _ = select.select([master_fd], [], [], 0.3)
+            if not ready:
+                if proc.poll() is not None:
+                    break
+                continue
+            chunk = os.read(master_fd, 4096)
+            if not chunk:
+                break
+            output_parts.append(_clean_output(chunk.decode("utf-8", errors="ignore")))
+        proc.wait(timeout=2)
     except subprocess.TimeoutExpired:
         proc.kill()
-        tail, _ = proc.communicate()
-    output_parts.append(_clean_output(tail))
+        proc.wait(timeout=2)
+    finally:
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
     return "".join(output_parts)
 
 
@@ -192,7 +237,7 @@ def scan_for_devices(seconds: int = 10) -> tuple[list[dict[str, str]], str]:
         text=True,
     )
     assert proc.stdin is not None
-    proc.stdin.write("power on\npairable on\nagent KeyboardDisplay\ndefault-agent\nscan on\n")
+    proc.stdin.write(_agent_setup_commands() + "scan on\n")
     proc.stdin.flush()
     time.sleep(seconds)
     proc.stdin.write("devices\nscan off\nquit\n")
