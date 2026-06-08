@@ -76,6 +76,9 @@ class EvdevKeyReader:
                 pass
         self._fds = []
 
+    def has_devices(self) -> bool:
+        return bool(self._fds)
+
     def read_key(self, timeout: float = 0.0) -> str | None:
         if not self._fds:
             if time.time() - self._last_refresh >= 2:

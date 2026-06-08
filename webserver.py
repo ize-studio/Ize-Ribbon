@@ -3,7 +3,7 @@ from html import escape
 
 from flask import Flask, redirect, render_template_string, request, send_file, url_for
 
-from bluetooth import adapter_status, connect_device, connected_devices, devices, remembered_devices, scan_for_devices
+from bluetooth import adapter_status, connect_device, connected_devices, devices, remembered_devices, scan_and_connect_keyboard, scan_for_devices
 from config_store import ROOT, load_config, save_config, update_activity
 from documents import counts, list_documents, new_document, preview, read_text, set_current_document, write_text
 from git_sync import configure_docs_repo, generate_ssh_key, public_key_text, request_git_sync, test_github_connection
@@ -321,9 +321,10 @@ def bluetooth_page():
     body = f"""
     <section><a class="button" href="{url_for('index')}">Back</a></section>
     {notice_from_query()}
-    <section class="notice">Put the keyboard in pairing mode, press Scan, then connect from the list. You do not need to know the MAC address.</section>
+    <section class="notice">Put the keyboard in pairing mode, press Scan, then connect from the list. Legacy keyboards may ask for a PIN or confirmation during pairing.</section>
     <section class="row">
-      <form method="post" action="{url_for('bluetooth_scan')}"><button>Scan</button></form>
+      <form method="post" action="{url_for('bluetooth_auto_connect')}"><button>Scan and Connect Keyboard</button></form>
+      <form method="post" action="{url_for('bluetooth_scan')}"><button>Scan Only</button></form>
     </section>
     <section>
       <table>
@@ -333,8 +334,10 @@ def bluetooth_page():
     </section>
     <section>
       <form method="post" action="{url_for('bluetooth_connect')}">
-        <p class="muted">Advanced: connect by MAC address only if the device is not listed.</p>
+        <p class="muted">Advanced: connect by MAC address only if the device is not listed. For legacy keyboards, enter a PIN, start pairing, then type the same PIN on the keyboard and press Enter.</p>
         <input name="mac" placeholder="AA:BB:CC:DD:EE:FF">
+        <input name="pin" placeholder="PIN for legacy keyboard">
+        <label><input type="checkbox" name="reset" value="1"> reset old pairing first</label>
         <button>pair / trust / connect</button>
       </form>
     </section>
@@ -354,12 +357,21 @@ def bluetooth_scan():
     return redirect(url_for("bluetooth_page", message=f"Scan complete. {names}\n\nRaw scan output:\n{output[-2500:]}"))
 
 
+@app.post("/bluetooth/auto-connect")
+def bluetooth_auto_connect():
+    message = scan_and_connect_keyboard()
+    update_activity()
+    return redirect(url_for("bluetooth_page", message=message[-2500:]))
+
+
 @app.post("/bluetooth/connect")
 def bluetooth_connect():
     mac = request.form.get("mac", "").strip()
+    pin = request.form.get("pin", "").strip()
+    reset = request.form.get("reset") == "1"
     message = ""
     if mac:
-        message = connect_device(mac)
+        message = connect_device(mac, pin=pin, reset=reset)
     update_activity()
     return redirect(url_for("bluetooth_page", message=message[-1200:]))
 

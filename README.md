@@ -38,13 +38,13 @@ The fallback access point is intended for first-time local setup and recovery. U
 
 The repository includes the required font files:
 
-- `DungGeunMo.ttf`
+- `D2Coding-Ver1.3.2-20180524.ttf`
 - `NotoSansMono-Regular.ttf`
 
 After cloning or copying the project, confirm they exist:
 
 ```bash
-ls /home/ize/ize-ribbon/fonts/DungGeunMo.ttf
+ls /home/ize/ize-ribbon/fonts/D2Coding-Ver1.3.2-20180524.ttf
 ls /home/ize/ize-ribbon/fonts/NotoSansMono-Regular.ttf
 ```
 
@@ -172,7 +172,7 @@ The font files should already be present after cloning this repository:
 Check:
 
 ```bash
-ls /home/ize/ize-ribbon/fonts/DungGeunMo.ttf
+ls /home/ize/ize-ribbon/fonts/D2Coding-Ver1.3.2-20180524.ttf
 ls /home/ize/ize-ribbon/fonts/NotoSansMono-Regular.ttf
 ```
 
@@ -419,8 +419,8 @@ Arrow keys are handled through Linux input events when in menus. Bluetooth and U
 
 Fonts:
 
-- Korean: `DungGeunMo.ttf`
-- Latin and other configured languages: `NotoSansMono-Regular.ttf`
+- Primary: `D2Coding-Ver1.3.2-20180524.ttf`
+- Fallback for characters not found in D2Coding: `NotoSansMono-Regular.ttf`
 
 ## Device Menu
 
@@ -659,8 +659,10 @@ Main `config.json` keys:
 - `title`: display title
 - `version`: firmware/software version
 - `document`: current document path
-- `font_ko`: Korean font
-- `font_latin`: Latin font
+- `font_primary`: primary display font
+- `font_fallback`: fallback display font used when a character is missing from the primary font
+- `font_ko`: legacy Korean font key
+- `font_latin`: legacy Latin font key
 - `body_font_size`: body text size
 - `line_gap`: body line spacing
 - `display_rotation`: `180` for upside-down mounting

@@ -29,8 +29,8 @@ usermod -aG bluetooth,netdev ize || true
 install -d -o ize -g ize "$PROJECT/docs" "$PROJECT/fonts" /run/ize-ribbon
 chown -R ize:ize "$PROJECT"
 
-if [ ! -f "$PROJECT/fonts/DungGeunMo.ttf" ]; then
-  echo "Missing $PROJECT/fonts/DungGeunMo.ttf" >&2
+if [ ! -f "$PROJECT/fonts/D2Coding-Ver1.3.2-20180524.ttf" ]; then
+  echo "Missing $PROJECT/fonts/D2Coding-Ver1.3.2-20180524.ttf" >&2
 fi
 
 if [ ! -f "$PROJECT/fonts/NotoSansMono-Regular.ttf" ]; then

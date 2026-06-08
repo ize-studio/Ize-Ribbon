@@ -279,10 +279,7 @@ def read_key() -> str | None:
 
 
 def read_text_key() -> str | None:
-    key = read_key()
-    if key in ("esc", "up", "down", "left", "right", "enter", "backspace"):
-        return None
-    return key
+    return read_key()
 
 
 def wait_for_startup_ready() -> bool:
@@ -349,6 +346,8 @@ def main() -> None:
                 drain_tty_pending(0.25)
             elif menu.mode == "writing":
                 key = read_text_key()
+            elif not evdev.has_devices():
+                key = read_key()
             if key is None:
                 continue
             immediate_render = True

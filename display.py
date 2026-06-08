@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import struct
 import sys
 import time
 import unicodedata
@@ -19,6 +20,7 @@ _EPD = None
 _BASE_READY = False
 _FONT_CACHE = {}
 _FONT_PATH_CACHE = {}
+_FONT_CMAP_CACHE = {}
 _CHAR_WIDTH_CACHE = {}
 _HANGUL_Y_OFFSET = None
 _STATUS_CACHE = {
@@ -38,6 +40,76 @@ def font_path(font_key: str):
     return _FONT_PATH_CACHE[font_key]
 
 
+def font_chars(path: Path) -> set[int]:
+    cache_key = str(path)
+    if cache_key in _FONT_CMAP_CACHE:
+        return _FONT_CMAP_CACHE[cache_key]
+    chars: set[int] = set()
+    try:
+        data = path.read_bytes()
+        table_count = struct.unpack_from(">H", data, 4)[0]
+        cmap_offset = None
+        for index in range(table_count):
+            offset = 12 + index * 16
+            tag, _, table_offset, _ = struct.unpack_from(">4sIII", data, offset)
+            if tag == b"cmap":
+                cmap_offset = table_offset
+                break
+        if cmap_offset is not None:
+            subtables = struct.unpack_from(">H", data, cmap_offset + 2)[0]
+            for index in range(subtables):
+                record = cmap_offset + 4 + index * 8
+                _, _, sub_offset = struct.unpack_from(">HHI", data, record)
+                chars.update(read_cmap_subtable(data, cmap_offset + sub_offset))
+    except (OSError, struct.error):
+        chars = set()
+    _FONT_CMAP_CACHE[cache_key] = chars
+    return chars
+
+
+def read_cmap_subtable(data: bytes, offset: int) -> set[int]:
+    fmt = struct.unpack_from(">H", data, offset)[0]
+    chars: set[int] = set()
+    if fmt == 4:
+        seg_count = struct.unpack_from(">H", data, offset + 6)[0] // 2
+        end_codes = offset + 14
+        start_codes = end_codes + seg_count * 2 + 2
+        id_deltas = start_codes + seg_count * 2
+        id_range_offsets = id_deltas + seg_count * 2
+        for index in range(seg_count):
+            start = struct.unpack_from(">H", data, start_codes + index * 2)[0]
+            end = struct.unpack_from(">H", data, end_codes + index * 2)[0]
+            if start == 0xFFFF and end == 0xFFFF:
+                continue
+            delta = struct.unpack_from(">h", data, id_deltas + index * 2)[0]
+            range_offset_pos = id_range_offsets + index * 2
+            range_offset = struct.unpack_from(">H", data, range_offset_pos)[0]
+            for codepoint in range(start, end + 1):
+                if range_offset == 0:
+                    glyph = (codepoint + delta) & 0xFFFF
+                else:
+                    glyph_pos = range_offset_pos + range_offset + (codepoint - start) * 2
+                    if glyph_pos + 2 > len(data):
+                        continue
+                    glyph = struct.unpack_from(">H", data, glyph_pos)[0]
+                    if glyph:
+                        glyph = (glyph + delta) & 0xFFFF
+                if glyph:
+                    chars.add(codepoint)
+    elif fmt == 12:
+        groups = struct.unpack_from(">I", data, offset + 12)[0]
+        for index in range(groups):
+            group = offset + 16 + index * 12
+            start, end, _ = struct.unpack_from(">III", data, group)
+            chars.update(range(start, end + 1))
+    return chars
+
+
+def font_supports(path: Path, ch: str) -> bool:
+    chars = font_chars(path)
+    return not chars or ord(ch) in chars
+
+
 def has_hangul(text: str) -> bool:
     return any("HANGUL" in unicodedata.name(ch, "") for ch in text)
 
@@ -47,8 +119,7 @@ def is_hangul_char(ch: str) -> bool:
 
 
 def font_for_text(text: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    font_key = "font_ko" if has_hangul(text) else "font_latin"
-    path = font_path(font_key)
+    path = font_path("font_primary")
     cache_key = (str(path), size)
     if cache_key in _FONT_CACHE:
         return _FONT_CACHE[cache_key]
@@ -61,8 +132,8 @@ def font_for_text(text: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.Im
 
 
 def font_for_char(ch: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    font_key = "font_ko" if is_hangul_char(ch) else "font_latin"
-    path = font_path(font_key)
+    primary = font_path("font_primary")
+    path = primary if font_supports(primary, ch) else font_path("font_fallback")
     cache_key = (str(path), size)
     if cache_key in _FONT_CACHE:
         return _FONT_CACHE[cache_key]
@@ -147,6 +218,9 @@ def visible_body_lines(text: str, draw: ImageDraw.ImageDraw, width: int, max_lin
 
 def render_image(overlay_lines: list[str] | None = None, text_override: str | None = None, lightweight: bool = False) -> Image.Image:
     config = load_config()
+    global _HANGUL_Y_OFFSET
+    if _HANGUL_Y_OFFSET is None:
+        _HANGUL_Y_OFFSET = int(config.get("hangul_y_offset", 2))
     width = int(config.get("width", EPD_WIDTH))
     height = int(config.get("height", EPD_HEIGHT))
     scale = max(1, int(config.get("render_scale", 1)))
@@ -199,15 +273,16 @@ def render_image(overlay_lines: list[str] | None = None, text_override: str | No
     body_top = top_h + 3 * scale
     body_bottom = canvas_height - bottom_h - 2 * scale
     line_gap = int(config.get("line_gap", 20)) * scale
-    max_lines = max(1, (body_bottom - body_top) // line_gap)
+    safe_line_gap = max(line_gap, body_size + _HANGUL_Y_OFFSET)
+    max_lines = max(1, (body_bottom - body_top) // safe_line_gap)
     max_lines = min(max_lines, int(config.get("body_visible_lines", 3)))
     body_width = canvas_width - margin * 2
     lines = overlay_lines if overlay_lines is not None else visible_body_lines(text, draw, body_width, max_lines, body_size)
-    lines_height = line_gap * max(0, len(lines) - 1) + body_size
+    lines_height = safe_line_gap * max(0, len(lines) - 1) + body_size
     y = body_top + max(0, (body_bottom - body_top - lines_height) // 2)
     for line in lines:
         draw_mixed_text(draw, (margin, y), line, body_size)
-        y += line_gap
+        y += safe_line_gap
 
     if not invert_status:
         draw.line((0, canvas_height - bottom_h, canvas_width, canvas_height - bottom_h), fill=separator_fill, width=scale)
