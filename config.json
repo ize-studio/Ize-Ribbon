@@ -1,6 +1,6 @@
 {
   "title": "Ize Ribbon",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "document": "docs/note0001.txt",
   "display_module": "epd2in13_V4",
   "font_primary": "fonts/D2Coding-Ver1.3.2-20180524.ttf",
