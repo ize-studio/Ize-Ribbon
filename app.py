@@ -299,7 +299,6 @@ def wait_for_startup_ready() -> bool:
             sync_message(_SHUTDOWN_LINES)
             time.sleep(2)
             return False
-        update_activity()
         keyboard_ready = keyboard_connected()
         wifi_ready = client_wifi_connected()
         if keyboard_ready:
