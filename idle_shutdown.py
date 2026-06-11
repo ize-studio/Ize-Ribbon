@@ -1,7 +1,7 @@
 import time
 from pathlib import Path
 
-from battery import external_power_connected
+from battery import battery_percent, external_power_connected
 from config_store import load_config
 from power import shutdown_now
 
@@ -27,8 +27,16 @@ def main() -> None:
         config = load_config()
         enabled = bool(config.get("idle_shutdown_enabled", True))
         seconds = int(config.get("idle_shutdown_seconds", 1800))
+        low_battery_enabled = bool(config.get("low_battery_shutdown_enabled", True))
+        low_battery_percent = int(config.get("low_battery_shutdown_percent", 20))
         activity_file = Path(config.get("activity_file", "/run/ize-ribbon/activity"))
-        if external_power_connected():
+        on_external_power = external_power_connected()
+        if not on_external_power and low_battery_enabled:
+            percent = battery_percent()
+            if percent is not None and percent <= low_battery_percent:
+                shutdown_now(["Sleeping", f"Battery {percent}%"])
+                return
+        if on_external_power:
             time.sleep(5)
             continue
         if enabled and seconds > 0 and time.time() - last_activity(activity_file) >= seconds:

@@ -22,6 +22,37 @@ def _clean_output(text: str) -> str:
     return ANSI_RE.sub("", text).replace("\r", "")
 
 
+def _short_bluetooth_message(text: str) -> str:
+    lines: list[str] = []
+    for raw in _clean_output(text).splitlines():
+        line = raw.strip()
+        lowered = line.lower()
+        if not line:
+            continue
+        if any(
+            token in lowered
+            for token in (
+                "pairing successful",
+                "connected: yes",
+                "connection successful",
+                "failed to connect",
+                "not available",
+                "authenticationfailed",
+                "authentication canceled",
+                "connection attempt failed",
+                "confirm passkey",
+                "accept pairing",
+                "authorize service",
+                "enter pin code",
+                "request pin code",
+                "request passkey",
+                "device has been removed",
+            )
+        ):
+            lines.append(line)
+    return "\n".join(lines[-8:])
+
+
 def _agent_setup_commands(agent: str = "KeyboardDisplay") -> str:
     return (
         "power on\n"
@@ -261,23 +292,30 @@ def connect_device(mac: str, pin: str = "", reset: bool = False) -> str:
         time.sleep(1)
     agent = "KeyboardOnly" if pin else "KeyboardDisplay"
     for attempt in range(1, 4):
-        output_parts.append(f"\n--- attempt {attempt} ---\n")
-        output_parts.append(_interactive_pair(mac, pin, agent, timeout=30))
+        output_parts.append(f"Pairing attempt {attempt}...\n")
+        result = _interactive_pair(mac, pin, agent, timeout=30)
+        short = _short_bluetooth_message(result)
+        if short:
+            output_parts.append(short + "\n")
         if device_connected(mac):
-            output_parts.append("\nConnected.\n")
+            output_parts.append("Connected.\n")
+            return "".join(output_parts)
+        lowered = result.lower()
+        if not pin and any(token in lowered for token in ("enter pin code", "request pin code", "request passkey")):
+            output_parts.append("PIN required. Enter a PIN above, start pairing again, then type the same PIN on the keyboard and press Enter.\n")
             return "".join(output_parts)
         time.sleep(1.5)
     if pin:
-        output_parts.append("\nNot connected. For legacy keyboards, type the same PIN on the keyboard and press Enter during pairing.\n")
+        output_parts.append("Not connected. Type the same PIN on the keyboard and press Enter during pairing.\n")
     else:
-        output_parts.append("\nNot connected. Put the keyboard back in pairing mode and try once more. If it is a legacy keyboard, use PIN pairing.\n")
+        output_parts.append("Not connected. Put the keyboard back in pairing mode and try again. If it is a legacy keyboard, use PIN pairing.\n")
     return "".join(output_parts)
 
 
 def scan_and_connect_keyboard(seconds: int = 18) -> str:
     found, output = scan_for_devices(seconds)
     if not found:
-        return f"No Bluetooth devices found.\n\n{output[-2000:]}"
+        return "Scan complete. No Bluetooth devices found."
     keyboard_words = ("keyboard", "keys", "keychron", "logitech", "hhkb", "mx keys")
     preferred = [item for item in found if any(word in item["name"].lower() for word in keyboard_words)]
     candidates = preferred or found
@@ -285,9 +323,9 @@ def scan_and_connect_keyboard(seconds: int = 18) -> str:
     for item in candidates[:5]:
         output_parts.append(f"\nTrying {item['name']} ({item['mac']})\n")
         result = connect_device(item["mac"])
-        output_parts.append(result[-2000:])
+        output_parts.append(result[-800:])
         if device_connected(item["mac"]):
             write_scan_cache(_merge_devices([item], found, read_scan_cache()))
             return "".join(output_parts)
-    output_parts.append("\nNo candidate connected.\n")
+    output_parts.append("\nNo keyboard connected.\n")
     return "".join(output_parts)

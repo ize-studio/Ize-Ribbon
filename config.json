@@ -22,7 +22,9 @@
   "invert_status_bars": true,
   "count_mode": "chars",
   "idle_shutdown_enabled": true,
-  "idle_shutdown_seconds": 1800,
+  "idle_shutdown_seconds": 600,
+  "low_battery_shutdown_enabled": true,
+  "low_battery_shutdown_percent": 20,
   "available_languages": [
     {"code": "EN", "label": "English", "font": "fonts/D2Coding-Ver1.3.2-20180524.ttf"},
     {"code": "KO", "label": "Korean", "font": "fonts/D2Coding-Ver1.3.2-20180524.ttf"},

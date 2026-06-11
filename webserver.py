@@ -65,6 +65,12 @@ def notice_from_query() -> str:
     return f"<section class='notice'><pre>{escape(message)}</pre></section>"
 
 
+def bluetooth_status_box(message: str = "") -> str:
+    if not message:
+        return ""
+    return f"<section class='notice'><strong>Bluetooth</strong><pre>{escape(message)}</pre></section>"
+
+
 def status_panel() -> str:
     config = load_config()
     port = int(config.get("web_port", 8080))
@@ -306,6 +312,7 @@ def github_sync_now():
 @app.get("/bluetooth")
 def bluetooth_page():
     status = escape(adapter_status())
+    message = request.args.get("message", "")
     rows = []
     for item in devices():
         raw_name = item["name"]
@@ -320,11 +327,11 @@ def bluetooth_page():
         rows.append("<tr><td colspan='2' class='muted'>No Bluetooth devices found yet. Put the keyboard in pairing mode and press Scan.</td></tr>")
     body = f"""
     <section><a class="button" href="{url_for('index')}">Back</a></section>
-    {notice_from_query()}
-    <section class="notice">Put the keyboard in pairing mode, press Scan, then connect from the list. Legacy keyboards may ask for a PIN or confirmation during pairing.</section>
+    {bluetooth_status_box(message)}
+    <section class="notice">Put the keyboard in pairing mode, start a scan, then connect from the list. If pairing needs a PIN, type the same PIN on the keyboard and press Enter.</section>
     <section class="row">
-      <form method="post" action="{url_for('bluetooth_auto_connect')}"><button>Scan and Connect Keyboard</button></form>
-      <form method="post" action="{url_for('bluetooth_scan')}"><button>Scan Only</button></form>
+      <form method="post" action="{url_for('bluetooth_auto_connect')}" onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Scanning...';"><button>Scan and Connect Keyboard</button></form>
+      <form method="post" action="{url_for('bluetooth_scan')}" onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Scanning...';"><button>Scan Only</button></form>
     </section>
     <section>
       <table>
@@ -334,34 +341,31 @@ def bluetooth_page():
     </section>
     <section>
       <form method="post" action="{url_for('bluetooth_connect')}">
-        <p class="muted">Advanced: connect by MAC address only if the device is not listed. For legacy keyboards, enter a PIN, start pairing, then type the same PIN on the keyboard and press Enter.</p>
+        <p class="muted">Enter a PIN by default for legacy keyboards. If the keyboard does not need one, leave it blank.</p>
         <input name="mac" placeholder="AA:BB:CC:DD:EE:FF">
         <input name="pin" placeholder="PIN for legacy keyboard">
         <label><input type="checkbox" name="reset" value="1"> reset old pairing first</label>
         <button>pair / trust / connect</button>
       </form>
     </section>
-    <section>
-      <p class="muted">Adapter Status</p>
-      <pre>{status}</pre>
-    </section>
+    <details><summary>Adapter status</summary><pre>{status}</pre></details>
     """
     return page(body)
 
 
 @app.post("/bluetooth/scan")
 def bluetooth_scan():
-    found, output = scan_for_devices()
+    found, _ = scan_for_devices()
     update_activity()
     names = ", ".join(f"{item['name']} ({item['mac']})" for item in found) or "No devices found during this scan."
-    return redirect(url_for("bluetooth_page", message=f"Scan complete. {names}\n\nRaw scan output:\n{output[-2500:]}"))
+    return redirect(url_for("bluetooth_page", message=f"Scan complete. {names}"))
 
 
 @app.post("/bluetooth/auto-connect")
 def bluetooth_auto_connect():
     message = scan_and_connect_keyboard()
     update_activity()
-    return redirect(url_for("bluetooth_page", message=message[-2500:]))
+    return redirect(url_for("bluetooth_page", message=message[-1200:]))
 
 
 @app.post("/bluetooth/connect")

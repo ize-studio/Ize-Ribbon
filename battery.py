@@ -1,8 +1,12 @@
-from pathlib import Path
 import re
 import subprocess
+from pathlib import Path
 
 from config_store import load_config
+
+
+_PERCENT_CACHE_TEXT: str | None = None
+_PERCENT_CACHE_VALUE: int | None = None
 
 
 def external_power_connected() -> bool:
@@ -58,6 +62,15 @@ def _auto_capacity() -> str | None:
     return None
 
 
+def _parse_percent(text: str | None) -> int | None:
+    if not text:
+        return None
+    match = re.search(r"(\d{1,3})%", text)
+    if not match:
+        return None
+    return max(0, min(100, int(match.group(1))))
+
+
 def _percent_from_lipo_voltage(voltage: float) -> int:
     curve = [
         (4.20, 100),
@@ -110,8 +123,37 @@ def _ina219_capacity_text() -> str | None:
     return None
 
 
-def battery_text() -> str:
+def battery_percent() -> int | None:
+    global _PERCENT_CACHE_TEXT, _PERCENT_CACHE_VALUE
     config = load_config()
-    if config.get("battery_source") == "auto":
-        return _auto_capacity() or _ina219_capacity_text() or config.get("battery_manual_text", "--%")
+    if config.get("battery_source") != "auto":
+        value = _parse_percent(config.get("battery_manual_text", "--%"))
+        _PERCENT_CACHE_TEXT = config.get("battery_manual_text", "--%")
+        _PERCENT_CACHE_VALUE = value
+        return value
+
+    text = _auto_capacity() or _ina219_capacity_text() or config.get("battery_manual_text", "--%")
+    value = _parse_percent(text)
+    if value is None:
+        return _PERCENT_CACHE_VALUE
+
+    if _PERCENT_CACHE_VALUE is not None:
+        if external_power_connected() and value < _PERCENT_CACHE_VALUE - 15:
+            value = _PERCENT_CACHE_VALUE
+        elif value < _PERCENT_CACHE_VALUE - 20:
+            value = _PERCENT_CACHE_VALUE - 20
+        elif value > _PERCENT_CACHE_VALUE + 20:
+            value = _PERCENT_CACHE_VALUE + 20
+        value = max(0, min(100, value))
+
+    _PERCENT_CACHE_VALUE = value
+    _PERCENT_CACHE_TEXT = f"{value}%"
+    return value
+
+
+def battery_text() -> str:
+    percent = battery_percent()
+    if percent is not None:
+        return f"{percent}%"
+    config = load_config()
     return config.get("battery_manual_text", "--%")
