@@ -3,7 +3,7 @@ from pathlib import Path
 
 from battery import battery_percent, external_power_connected
 from config_store import load_config
-from power import shutdown_now
+from power import shutdown_lines, shutdown_now
 
 
 def last_activity(path: Path) -> float:
@@ -34,13 +34,10 @@ def main() -> None:
         if not on_external_power and low_battery_enabled:
             percent = battery_percent()
             if percent is not None and percent <= low_battery_percent:
-                shutdown_now(["Sleeping", f"Battery {percent}%"])
+                shutdown_now(shutdown_lines("Low battery", f"Battery {percent}%"))
                 return
-        if on_external_power:
-            time.sleep(5)
-            continue
         if enabled and seconds > 0 and time.time() - last_activity(activity_file) >= seconds:
-            shutdown_now()
+            shutdown_now(shutdown_lines("Idle timeout", f"{seconds // 60} min"))
             return
         time.sleep(5)
 

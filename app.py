@@ -1,12 +1,13 @@
 import select
 import signal
+import json
 import sys
 import termios
 import threading
 import tty
 import time
 
-from config_store import update_activity
+from config_store import ROOT, update_activity
 from bluetooth import reconnect_remembered_devices
 from display import show, show_message
 from documents import current_document, ensure_initial_document, new_document, read_text, write_text
@@ -50,7 +51,7 @@ _render_stop = False
 _render_generation = 0
 _render_request_generation = 0
 _shutdown_notice = False
-_SHUTDOWN_LINES = ["Sleeping", "Power off"]
+_SHUTDOWN_LINES = ["Powering off", "Power off", "Please wait"]
 _SAVE_DEBOUNCE_SECONDS = 0.8
 _save_event = threading.Event()
 _save_lock = threading.Lock()
@@ -140,6 +141,13 @@ def sync_message(message: str | list[str]) -> None:
 
 def request_shutdown_notice(signum, frame) -> None:
     global _shutdown_notice
+    global _SHUTDOWN_LINES
+    try:
+        data = json.loads((ROOT / "shutdown_notice.json").read_text(encoding="utf-8"))
+        if isinstance(data, list) and all(isinstance(item, str) for item in data):
+            _SHUTDOWN_LINES = data[:4]
+    except (OSError, ValueError):
+        pass
     _shutdown_notice = True
 
 
@@ -315,7 +323,7 @@ def wait_for_startup_ready() -> bool:
 
 
 def main() -> None:
-    global _render_stop, _save_stop, _shutdown_notice
+    global _render_stop, _save_stop, _shutdown_notice, _SHUTDOWN_LINES
     signal.signal(signal.SIGUSR1, request_shutdown_notice)
     signal.signal(signal.SIGTERM, request_service_stop)
     ensure_initial_document()
@@ -362,6 +370,7 @@ def main() -> None:
                     continue
                 if menu.mode == "poweroff":
                     flush_save(text_cache)
+                    _SHUTDOWN_LINES = ["Powering off", "Power off", "Menu"]
                     sync_message(_SHUTDOWN_LINES)
                     shutdown_after_notice()
                     return
